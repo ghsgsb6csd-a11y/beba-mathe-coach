@@ -356,26 +356,26 @@ export default function App() {
               flexWrap: "wrap"
             }}
           >
-            {mode === "photo" && (
-              <label
-                style={{
-                  background: "#2563eb",
-                  color: "white",
-                  borderRadius: "12px",
-                  padding: "12px 16px",
-                  cursor: "pointer",
-                  fontSize: "16px"
-                }}
-              >
-                📷 Foto aufnehmen
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  style={{ display: "none" }}
-                />
-              </label>
-            )}
+          {(mode === "photo" || mode === "exam") && (
+  <label
+    style={{
+      background: "#2563eb",
+      color: "white",
+      borderRadius: "12px",
+      padding: "12px 16px",
+      cursor: "pointer",
+      fontSize: "16px"
+    }}
+  >
+    📷 Foto aufnehmen
+    <input
+      type="file"
+      accept="image/*"
+      onChange={handleImageUpload}
+      style={{ display: "none" }}
+    />
+  </label>
+)}
 
             <button
               onClick={sendMessage}
