@@ -13,14 +13,20 @@ export default function App() {
   async function sendMessage() {
     if (!input.trim()) return;
 
-    const userMessage = {
-      role: "user",
-      text: input
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-
     const currentInput = input;
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "user",
+        text: currentInput
+      },
+      {
+        role: "assistant",
+        text: "Ich denke kurz nach..."
+      }
+    ]);
+
     setInput("");
 
     try {
@@ -37,18 +43,21 @@ export default function App() {
       const data = await response.json();
 
       setMessages((prev) => [
-        ...prev,
+        ...prev.slice(0, -1),
         {
           role: "assistant",
-          text: data.reply
+          text:
+            data.reply ||
+            data.error ||
+            "Keine Antwort von der KI erhalten."
         }
       ]);
     } catch (error) {
       setMessages((prev) => [
-        ...prev,
+        ...prev.slice(0, -1),
         {
           role: "assistant",
-          text: "Es gab einen Fehler mit der KI-Verbindung."
+          text: "Fehler: " + error.message
         }
       ]);
     }
