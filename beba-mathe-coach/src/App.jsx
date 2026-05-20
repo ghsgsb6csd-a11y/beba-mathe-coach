@@ -8,7 +8,7 @@ export default function App() {
       text:
         "# 👋 Willkommen beim BEBA-Mathecoach\n\n" +
         "Fotografiere deine Aufgabe oder deinen Lösungsweg.\n\n" +
-        "Ich analysiere Fehler, erkläre dir das Thema und übe mit dir Schritt für Schritt."
+        "Ich lese zuerst das Foto, prüfe dann mögliche Fehler und lerne mit dir Schritt für Schritt."
     }
   ]);
 
@@ -19,8 +19,6 @@ export default function App() {
   const [processingImage, setProcessingImage] = useState(false);
 
   async function compressImage(file) {
-    const img = new Image();
-
     const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
@@ -28,13 +26,14 @@ export default function App() {
       reader.readAsDataURL(file);
     });
 
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-      img.src = dataUrl;
+    const img = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = dataUrl;
     });
 
-    const maxSize = 850;
+    const maxSize = 1200;
     const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
 
     const width = Math.round(img.width * scale);
@@ -47,7 +46,7 @@ export default function App() {
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0, width, height);
 
-    return canvas.toDataURL("image/jpeg", 0.55);
+    return canvas.toDataURL("image/jpeg", 0.72);
   }
 
   async function handleImageUpload(e) {
@@ -72,15 +71,15 @@ export default function App() {
 
     const userText =
       input.trim() ||
-      "Bitte analysiere das Foto gründlich. Finde Fehler, erkläre sie und hilf mir, das Thema zu verstehen.";
+      "Bitte lies das Foto, finde mögliche Fehler und hilf mir beim Verstehen.";
 
-    const newUserMessage = {
+    const userMessage = {
       role: "user",
       text: userText,
       image: imagePreview
     };
 
-    const updatedMessages = [...messages, newUserMessage];
+    const updatedMessages = [...messages, userMessage];
 
     setMessages(updatedMessages);
     setInput("");
@@ -97,7 +96,7 @@ export default function App() {
           imageBase64,
           history: updatedMessages
             .filter((m) => !m.image)
-            .slice(-10)
+            .slice(-8)
             .map((m) => ({
               role: m.role,
               content: m.text
@@ -117,14 +116,14 @@ export default function App() {
 
       setImageBase64("");
       setImagePreview("");
-    } catch (error) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
           text:
-            "# Fehler\n\n" +
-            "Die Verbindung wurde unterbrochen. Bitte versuche es nochmal."
+            "## Verbindung unterbrochen\n\n" +
+            "Die Anfrage hat nicht geklappt. Bitte versuche es nochmal mit einem kleineren oder schärferen Foto."
         }
       ]);
     } finally {
@@ -223,7 +222,7 @@ export default function App() {
             >
               {processingImage
                 ? "📷 Ich bereite das Foto vor..."
-                : "🧠 Ich analysiere und denke mit dir Schritt für Schritt..."}
+                : "🧠 Ich lese zuerst das Foto und prüfe dann die Aufgabe..."}
             </div>
           )}
         </div>
