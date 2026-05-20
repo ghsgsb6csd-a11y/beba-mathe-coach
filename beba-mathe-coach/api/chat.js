@@ -19,166 +19,47 @@ export default async function handler(req, res) {
         content: String(m.content || "").slice(0, 1500)
       }));
 
-    const photoTutorPrompt = `
-Du bist BEBA, ein sehr guter Mathecoach für Schülerinnen und Schüler.
+    async function readPhoto(purpose) {
+      if (!imageBase64) return null;
 
-Du sollst wie ein echter hilfreicher KI-Tutor antworten:
-- freundlich
-- geduldig
-- konkret
-- interaktiv
-- nicht zu lang
-- ohne erfundene Inhalte
+      const readPrompt =
+        purpose === "exam"
+          ? `
+Du liest ein Foto einer selbst erstellten Klausuraufgabe, Klassenarbeit, Lernaufgabe oder Prüfungsaufgabe.
 
-WICHTIG:
-- Nutze nur Informationen, die aus dem Foto oder dem Chat sicher hervorgehen.
-- Wenn etwas unsicher ist, sage es ehrlich.
-- Erfinde keine Aufgaben, keine Zahlen, keine Variablen.
-- Verwende kein LaTeX.
-- Schreibe Multiplikation normal, z. B. 7 · 3 = 21.
-- Wenn das Foto unklar ist, bitte gezielt um eine bessere Stelle oder Abschrift.
-
-Bei einer Fotoanalyse antworte so:
-
-## Was ich erkennen kann
-
-Kurz zusammenfassen.
-
-## Mögliche Fehler
-
-Prüfe nur klar erkennbare Rechnungen.
-
-## Lass uns das verbessern
-
-Verbessere 1 bis 2 Stellen langsam.
-
-## Du bist dran
-
-Stelle eine kurze Frage, damit der Schüler weitermachen kann.
-`;
-
-    const examPrompt = `
-Du bist BEBA, ein professioneller Coach für Lehrkräfte, Referendarinnen, Referendare und Schüler, die eigene Klausuraufgaben verbessern möchten.
-
-Ziel:
-Du hilfst dabei, eigene Klausuraufgaben anhand der BEBA-Strategie zu verbessern.
-
-BEBA bedeutet:
-B = Beschreiben
-E = Erklären
-B = Begründen
-A = Anwenden
-
-Deine Aufgabe:
-- Prüfe, ob die Aufgabe klar, fair und lösbar ist.
-- Prüfe, ob sie zur angegebenen Klassenstufe passt.
-- Prüfe, ob Operatoren passend sind.
-- Prüfe, ob die Aufgabe wirklich Denken anregt.
-- Verbessere die Formulierung.
-- Erstelle bei Bedarf eine bessere Version.
-- Erstelle passende Teilaufgaben nach BEBA.
-- Erstelle einen Erwartungshorizont.
-- Gib Hinweise zur Bewertung.
-- Mache die Aufgabe nicht unnötig kompliziert.
-
-Antworte immer hilfreich und konkret.
-
-Nutze diese Struktur:
-
-## Erste Einschätzung
-
-Kurz: Was funktioniert schon gut? Was ist noch unklar?
-
-## BEBA-Check
-
-### B = Beschreiben
-Passt die Aufgabe dazu, dass Lernende erst beobachten, Informationen entnehmen oder beschreiben?
-
-### E = Erklären
-Müssen Lernende Zusammenhänge erklären?
-
-### B = Begründen
-Gibt es eine echte Begründungsanforderung?
-
-### A = Anwenden
-Können Lernende das Gelernte sinnvoll anwenden?
-
-## Verbesserte Aufgabenfassung
-
-Formuliere eine bessere, direkt nutzbare Version der Aufgabe.
-
-## Erwartungshorizont
-
-Gib Stichpunkte, woran eine gute Antwort erkennbar ist.
-
-## Bewertungsvorschlag
-
-Gib einen einfachen Punkteschlüssel oder Kriterien.
-
-## Rückfrage
-
-Stelle eine kurze Frage, z. B. nach Klassenstufe, Thema oder gewünschtem Schwierigkeitsgrad.
-
-Wichtig:
-Wenn Informationen fehlen, mache eine sinnvolle Annahme und sage kurz, welche.
-`;
-
-    if (mode === "exam") {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          temperature: 0.25,
-          max_tokens: 1600,
-          messages: [
-            { role: "system", content: examPrompt },
-            ...safeHistory,
-            {
-              role: "user",
-              content:
-                message ||
-                "Bitte verbessere diese Klausuraufgabe anhand der BEBA-Strategie."
-            }
-          ]
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        return res.status(500).json({
-          error: data.error?.message || "OpenAI Fehler"
-        });
-      }
-
-      return res.status(200).json({
-        reply: data.choices?.[0]?.message?.content || "Keine Antwort erhalten."
-      });
-    }
-
-    let photoReading = null;
-
-    if (imageBase64) {
-      const readPrompt = `
-Du liest ein Foto eines Schul-Arbeitsblattes oder eines handschriftlichen Lösungswegs.
-
-AUFGABE:
 Lies nur das Bild. Erkläre noch nichts.
 
-WICHTIG:
+Wichtig:
 - Schreibe nur, was du wirklich erkennst.
-- Wenn etwas unsicher ist, markiere es als unsicher.
+- Markiere unsichere Stellen.
+- Erfinde keine Aufgaben.
+- Erfinde keine Punkte.
+- Erfinde keine Klassenstufe.
+- Verwende kein LaTeX.
+
+Antworte als JSON:
+{
+  "aufgabentext_sicher": "",
+  "unsichere_stellen": [],
+  "sichtbare_operatoren": [],
+  "sichtbare_punkte": "",
+  "sichtbares_thema": "",
+  "lesbarkeit": "gut | mittel | schlecht"
+}
+`
+          : `
+Du liest ein Foto eines Schul-Arbeitsblattes oder eines handschriftlichen Lösungswegs.
+
+Lies nur das Bild. Erkläre noch nichts.
+
+Wichtig:
+- Schreibe nur, was du wirklich erkennst.
+- Markiere unsichere Stellen.
 - Erfinde keine Aufgaben.
 - Erfinde keine Variablen.
 - Verwende kein LaTeX.
-- Wenn kein x sichtbar ist, schreibe kein x.
-- Gib keine langen Erklärungen.
 
-Antworte als JSON mit:
+Antworte als JSON:
 {
   "sicher_erkannt": [],
   "unsicher": [],
@@ -189,7 +70,7 @@ Antworte als JSON mit:
 }
 `;
 
-      const readResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -222,42 +103,143 @@ Antworte als JSON mit:
         })
       });
 
-      const readData = await readResponse.json();
+      const data = await response.json();
 
-      if (!readResponse.ok) {
+      if (!response.ok) {
+        throw new Error(data.error?.message || "Fehler beim Lesen des Fotos");
+      }
+
+      return data.choices?.[0]?.message?.content || null;
+    }
+
+    if (mode === "exam") {
+      const photoReading = await readPhoto("exam");
+
+      const examPrompt = `
+Du bist BEBA, ein professioneller Coach für Klausuraufgaben.
+
+Du hilfst dabei, eigene Klausuraufgaben anhand der BEBA-Strategie zu verbessern.
+
+BEBA bedeutet:
+B = Beschreiben
+E = Erklären
+B = Begründen
+A = Anwenden
+
+Deine Aufgabe:
+- Prüfe, ob die Aufgabe klar, fair und lösbar ist.
+- Prüfe, ob sie zur Klassenstufe passt.
+- Prüfe, ob Operatoren passend sind.
+- Prüfe, ob die Aufgabe Denkprozesse anregt.
+- Verbessere die Formulierung.
+- Erstelle eine bessere Aufgabenfassung.
+- Erstelle einen Erwartungshorizont.
+- Gib Hinweise zur Bewertung.
+
+Wichtig:
+- Nutze nur Informationen aus dem Chat oder aus der Foto-Auslesung.
+- Wenn etwas fehlt, frage nach.
+- Wenn das Foto unklar ist, bitte um eine Abschrift.
+- Schreibe konkret und direkt nutzbar.
+
+Antwortstruktur:
+
+## Erste Einschätzung
+
+## BEBA-Check
+
+## Verbesserte Aufgabenfassung
+
+## Erwartungshorizont
+
+## Bewertungsvorschlag
+
+## Rückfrage
+`;
+
+      const userText =
+        message ||
+        "Bitte verbessere diese Klausuraufgabe anhand der BEBA-Strategie.";
+
+      const content = photoReading
+        ? "Hier ist die Foto-Auslesung der Klausuraufgabe:\n\n" +
+          photoReading +
+          "\n\nMeine Bitte dazu:\n" +
+          userText
+        : userText;
+
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          temperature: 0.25,
+          max_tokens: 1600,
+          messages: [
+            { role: "system", content: examPrompt },
+            ...safeHistory,
+            { role: "user", content }
+          ]
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
         return res.status(500).json({
-          error: readData.error?.message || "Fehler beim Lesen des Fotos"
+          error: data.error?.message || "OpenAI Fehler"
         });
       }
 
-      photoReading = readData.choices?.[0]?.message?.content || null;
-    }
-
-    const tutorMessages = [
-      { role: "system", content: photoTutorPrompt },
-      ...safeHistory
-    ];
-
-    if (photoReading) {
-      tutorMessages.push({
-        role: "user",
-        content:
-          "Hier ist die vorsichtige Foto-Auslesung als Grundlage. Nutze nur diese Informationen und sei ehrlich bei Unsicherheit:\n\n" +
-          photoReading +
-          "\n\nMeine Frage dazu:\n" +
-          (message ||
-            "Bitte hilf mir mit der Aufgabe und erkläre mir mögliche Fehler.")
-      });
-    } else {
-      tutorMessages.push({
-        role: "user",
-        content:
-          message ||
-          "Bitte hilf mir mit der Aufgabe und erkläre mir mögliche Fehler."
+      return res.status(200).json({
+        reply: data.choices?.[0]?.message?.content || "Keine Antwort erhalten."
       });
     }
 
-    const tutorResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+    const photoReading = await readPhoto("photo");
+
+    const photoTutorPrompt = `
+Du bist BEBA, ein sehr guter Mathecoach für Schülerinnen und Schüler.
+
+Antworte:
+- freundlich
+- konkret
+- interaktiv
+- nicht zu lang
+- ohne erfundene Inhalte
+
+Wichtig:
+- Nutze nur sichere Informationen.
+- Wenn etwas unsicher ist, sage es ehrlich.
+- Erfinde keine Aufgaben, Zahlen oder Variablen.
+- Verwende kein LaTeX.
+- Schreibe Multiplikation normal, z. B. 7 · 3 = 21.
+
+Antwortstruktur bei Fotoanalyse:
+
+## Was ich erkennen kann
+
+## Mögliche Fehler
+
+## Lass uns das verbessern
+
+## Du bist dran
+`;
+
+    const userText =
+      message || "Bitte hilf mir mit der Aufgabe und erkläre mögliche Fehler.";
+
+    const content = photoReading
+      ? "Hier ist die vorsichtige Foto-Auslesung:\n\n" +
+        photoReading +
+        "\n\nMeine Frage dazu:\n" +
+        userText
+      : userText;
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -267,20 +249,24 @@ Antworte als JSON mit:
         model: "gpt-4o",
         temperature: 0.2,
         max_tokens: 1000,
-        messages: tutorMessages
+        messages: [
+          { role: "system", content: photoTutorPrompt },
+          ...safeHistory,
+          { role: "user", content }
+        ]
       })
     });
 
-    const tutorData = await tutorResponse.json();
+    const data = await response.json();
 
-    if (!tutorResponse.ok) {
+    if (!response.ok) {
       return res.status(500).json({
-        error: tutorData.error?.message || "OpenAI Fehler"
+        error: data.error?.message || "OpenAI Fehler"
       });
     }
 
     return res.status(200).json({
-      reply: tutorData.choices?.[0]?.message?.content || "Keine Antwort erhalten."
+      reply: data.choices?.[0]?.message?.content || "Keine Antwort erhalten."
     });
   } catch (error) {
     return res.status(500).json({
