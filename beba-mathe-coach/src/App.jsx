@@ -8,7 +8,7 @@ export default function App() {
       text:
         "# 👋 Willkommen beim BEBA-Mathecoach\n\n" +
         "Fotografiere deine Aufgabe oder deinen Lösungsweg.\n\n" +
-        "Ich erkenne Handschrift, finde mögliche Fehler und helfe dir Schritt für Schritt."
+        "Ich lese die Handschrift, suche mögliche Fehler und helfe dir Schritt für Schritt mit BEBA."
     }
   ]);
 
@@ -16,61 +16,144 @@ export default function App() {
   const [imageBase64, setImageBase64] = useState("");
   const [imagePreview, setImagePreview] = useState("");
   const [loading, setLoading] = useState(false);
+  const [processingImage, setProcessingImage] = useState(false);
 
-  function compressImage(file) {
+  function getExifOrientation(arrayBuffer) {
+    const view = new DataView(arrayBuffer);
+
+    if (view.getUint16(0, false) !== 0xffd8) return 1;
+
+    let offset = 2;
+
+    while (offset < view.byteLength) {
+      const marker = view.getUint16(offset, false);
+      offset += 2;
+
+      if (marker === 0xffe1) {
+        offset += 2;
+
+        if (view.getUint32(offset, false) !== 0x45786966) return 1;
+
+        offset += 6;
+
+        const little = view.getUint16(offset, false) === 0x4949;
+        offset += view.getUint32(offset + 4, little);
+
+        const tags = view.getUint16(offset, little);
+        offset += 2;
+
+        for (let i = 0; i < tags; i++) {
+          const tagOffset = offset + i * 12;
+
+          if (view.getUint16(tagOffset, little) === 0x0112) {
+            return view.getUint16(tagOffset + 8, little);
+          }
+        }
+      } else {
+        offset += view.getUint16(offset, false);
+      }
+    }
+
+    return 1;
+  }
+
+  function loadImage(src) {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      const reader = new FileReader();
 
-      reader.onload = () => {
-        img.src = reader.result;
-      };
-
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-
-        const maxWidth = 1000;
-        const scale = Math.min(maxWidth / img.width, 1);
-
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
-
-        const ctx = canvas.getContext("2d");
-
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-        const compressedBase64 = canvas.toDataURL(
-          "image/jpeg",
-          0.7
-        );
-
-        resolve(compressedBase64);
-      };
-
+      img.onload = () => resolve(img);
       img.onerror = reject;
-      reader.onerror = reject;
+      img.src = src;
+    });
+  }
 
+  async function compressAndRotateImage(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const orientation = getExifOrientation(arrayBuffer);
+
+    const reader = new FileReader();
+
+    const dataUrl = await new Promise((resolve, reject) => {
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
       reader.readAsDataURL(file);
     });
+
+    const img = await loadImage(dataUrl);
+
+    const maxSize = 900;
+    const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
+
+    let width = Math.round(img.width * scale);
+    let height = Math.round(img.height * scale);
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    if ([5, 6, 7, 8].includes(orientation)) {
+      canvas.width = height;
+      canvas.height = width;
+    } else {
+      canvas.width = width;
+      canvas.height = height;
+    }
+
+    switch (orientation) {
+      case 2:
+        ctx.translate(width, 0);
+        ctx.scale(-1, 1);
+        break;
+      case 3:
+        ctx.translate(width, height);
+        ctx.rotate(Math.PI);
+        break;
+      case 4:
+        ctx.translate(0, height);
+        ctx.scale(1, -1);
+        break;
+      case 5:
+        ctx.rotate(0.5 * Math.PI);
+        ctx.scale(1, -1);
+        break;
+      case 6:
+        ctx.rotate(0.5 * Math.PI);
+        ctx.translate(0, -height);
+        break;
+      case 7:
+        ctx.rotate(0.5 * Math.PI);
+        ctx.translate(width, -height);
+        ctx.scale(-1, 1);
+        break;
+      case 8:
+        ctx.rotate(-0.5 * Math.PI);
+        ctx.translate(-width, 0);
+        break;
+      default:
+        break;
+    }
+
+    ctx.drawImage(img, 0, 0, width, height);
+
+    return canvas.toDataURL("image/jpeg", 0.55);
   }
 
   async function handleImageUpload(e) {
     const file = e.target.files?.[0];
-
     if (!file) return;
 
     try {
-      setLoading(true);
+      setProcessingImage(true);
 
-      const compressed = await compressImage(file);
+      const compressed = await compressAndRotateImage(file);
 
       setImageBase64(compressed);
       setImagePreview(compressed);
     } catch (error) {
-      alert("Fehler beim Verarbeiten des Bildes.");
+      alert("Das Foto konnte nicht verarbeitet werden. Bitte versuche es nochmal.");
+    } finally {
+      setProcessingImage(false);
+      e.target.value = "";
     }
-
-    setLoading(false);
   }
 
   async function sendMessage() {
@@ -94,11 +177,13 @@ export default function App() {
     setInput("");
     setLoading(true);
 
-    try {
-      console.log("Sende Anfrage...");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
 
+    try {
       const response = await fetch("/api/chat", {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "Content-Type": "application/json"
         },
@@ -107,6 +192,8 @@ export default function App() {
           imageBase64
         })
       });
+
+      clearTimeout(timeoutId);
 
       const data = await response.json();
 
@@ -130,12 +217,14 @@ export default function App() {
           role: "assistant",
           text:
             "# Fehler\n\n" +
-            (error.message || "Unbekannter Fehler")
+            "Die Analyse hat zu lange gedauert oder die Verbindung wurde unterbrochen.\n\n" +
+            "Bitte versuche es nochmal mit einem schärferen Foto und möglichst wenig Hintergrund."
         }
       ]);
+    } finally {
+      clearTimeout(timeoutId);
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   function resetChat() {
@@ -163,18 +252,8 @@ export default function App() {
         boxSizing: "border-box"
       }}
     >
-      <div
-        style={{
-          maxWidth: "900px",
-          margin: "0 auto"
-        }}
-      >
-        <h1
-          style={{
-            textAlign: "center",
-            marginBottom: "20px"
-          }}
-        >
+      <div style={{ maxWidth: "900px", margin: "0 auto" }}>
+        <h1 style={{ textAlign: "center", marginBottom: "20px" }}>
           📘 BEBA-Mathecoach
         </h1>
 
@@ -193,24 +272,15 @@ export default function App() {
               key={index}
               style={{
                 display: "flex",
-                justifyContent:
-                  msg.role === "user"
-                    ? "flex-end"
-                    : "flex-start",
+                justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
                 marginBottom: "16px"
               }}
             >
               <div
                 style={{
                   maxWidth: "90%",
-                  background:
-                    msg.role === "user"
-                      ? "#2563eb"
-                      : "#f1f5f9",
-                  color:
-                    msg.role === "user"
-                      ? "white"
-                      : "#111827",
+                  background: msg.role === "user" ? "#2563eb" : "#f1f5f9",
+                  color: msg.role === "user" ? "white" : "#111827",
                   borderRadius: "18px",
                   padding: "14px",
                   lineHeight: "1.6",
@@ -233,14 +303,12 @@ export default function App() {
                   />
                 )}
 
-                <ReactMarkdown>
-                  {msg.text}
-                </ReactMarkdown>
+                <ReactMarkdown>{msg.text}</ReactMarkdown>
               </div>
             </div>
           ))}
 
-          {loading && (
+          {(loading || processingImage) && (
             <div
               style={{
                 display: "inline-block",
@@ -250,7 +318,9 @@ export default function App() {
                 color: "#555"
               }}
             >
-              📖 Ich lese die Handschrift und analysiere die Aufgabe...
+              {processingImage
+                ? "📷 Ich bereite das Foto vor..."
+                : "📖 Ich lese die Handschrift und analysiere die Aufgabe..."}
             </div>
           )}
         </div>
@@ -265,9 +335,7 @@ export default function App() {
               boxShadow: "0 2px 8px rgba(0,0,0,0.08)"
             }}
           >
-            <p style={{ marginTop: 0 }}>
-              Ausgewähltes Foto:
-            </p>
+            <p style={{ marginTop: 0 }}>Ausgewähltes Foto:</p>
 
             <img
               src={imagePreview}
@@ -308,9 +376,7 @@ export default function App() {
         >
           <textarea
             value={input}
-            onChange={(e) =>
-              setInput(e.target.value)
-            }
+            onChange={(e) => setInput(e.target.value)}
             placeholder="Was verstehst du nicht?"
             rows={3}
             style={{
@@ -343,7 +409,6 @@ export default function App() {
               }}
             >
               📷 Foto aufnehmen
-
               <input
                 type="file"
                 accept="image/*"
@@ -354,26 +419,18 @@ export default function App() {
 
             <button
               onClick={sendMessage}
-              disabled={loading}
+              disabled={loading || processingImage}
               style={{
                 border: "none",
-                background:
-                  loading
-                    ? "#9ca3af"
-                    : "#16a34a",
+                background: loading || processingImage ? "#9ca3af" : "#16a34a",
                 color: "white",
                 borderRadius: "12px",
                 padding: "12px 18px",
-                cursor:
-                  loading
-                    ? "not-allowed"
-                    : "pointer",
+                cursor: loading || processingImage ? "not-allowed" : "pointer",
                 fontWeight: "bold"
               }}
             >
-              {loading
-                ? "Analysiere..."
-                : "Senden"}
+              {loading ? "Analysiere..." : "Senden"}
             </button>
 
             <button
