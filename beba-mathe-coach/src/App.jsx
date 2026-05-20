@@ -39,7 +39,7 @@ export default function App() {
         padding: "20px"
       }}
     >
-      <h1>📘 BEBA-Mathecoach</h1>
+     <h1>TEST VERSION 123</h1>
 
       <p>
         Verstehe schwierige Aufgaben aus deiner Mathearbeit Schritt für Schritt.
