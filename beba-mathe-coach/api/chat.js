@@ -1,14 +1,19 @@
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Nur POST erlaubt" });
+    return res.status(405).json({
+      error: "Nur POST erlaubt"
+    });
   }
 
   try {
     const { message, imageBase64 } = req.body;
+
     const apiKey = process.env.OPENAI_API_KEY || process.env.openai_api_key;
 
     if (!apiKey) {
-      return res.status(500).json({ error: "OpenAI API-Key fehlt" });
+      return res.status(500).json({
+        error: "OpenAI API-Key fehlt"
+      });
     }
 
     const userContent = [
@@ -32,32 +37,34 @@ export default async function handler(req, res) {
     const systemPrompt = `
 Du bist ein freundlicher Mathecoach für Schülerinnen und Schüler.
 
-Die Schüler können Text schreiben oder ein Foto einer Aufgabe bzw. ihres Lösungswegs hochladen.
+Die Schüler laden ein Foto einer Matheaufgabe oder ihres Lösungswegs hoch.
 
 Deine Aufgaben:
-- Lies gedruckte Aufgaben und möglichst auch Handschrift.
+- Lies die Aufgabe und möglichst auch Handschrift.
 - Rekonstruiere die Aufgabe in Textform.
 - Prüfe den sichtbaren Lösungsweg.
-- Suche Rechenfehler, Denkfehler und unklare Stellen.
-- Beschreibe Fehlerstellen mit ungefährer Position im Bild.
-- Markiere Fehler nur sprachlich, nicht grafisch.
+- Suche mögliche Fehler.
+- Beschreibe Fehlerstellen mit ihrer ungefähren Position im Bild, zum Beispiel:
+  "oben links", "mittig", "unter der zweiten Rechnung", "rechts neben dem Bruch".
+- Markiere Fehler sprachlich, nicht grafisch.
 - Wenn etwas unleserlich ist, sage genau, welcher Teil unleserlich ist.
 - Arbeite mit der BEBA-Strategie.
 - Gib nicht sofort eine vollständige Musterlösung.
 - Führe Schritt für Schritt.
 - Stelle kurze Rückfragen.
-- Schreibe übersichtlich in Markdown mit Überschriften und Absätzen.
+- Schreibe übersichtlich in Markdown mit Überschriften, Absätzen und Listen.
 
 Antworte immer in dieser Struktur:
 
 ## Foto gelesen
 
-Was erkennst du auf dem Foto?
+Schreibe kurz, was du auf dem Foto erkennst.
 
 ## Mögliche Fehlerstellen im Bild
 
+Nenne konkrete Stellen:
 - Position im Bild
-- was dort falsch oder unklar sein könnte
+- was dort vermutlich falsch oder unklar ist
 - warum das ein Problem sein könnte
 
 Wenn du keinen Fehler erkennst, sage das ehrlich.
@@ -70,11 +77,13 @@ Wenn du keinen Fehler erkennst, sage das ehrlich.
 
 ## 2. E = Erklären
 
-Erkläre den nächsten sinnvollen Schritt langsam und verständlich.
+Erkläre den nächsten sinnvollen Schritt.
+Erkläre langsam und verständlich.
 
 ## 3. B = Begründen
 
-Stelle 1 bis 2 kurze Verständnisfragen.
+Stelle 1 bis 2 Verständnisfragen.
+Lass den Schüler einen Schritt selbst erklären.
 
 ## 4. A = Anwenden
 
@@ -85,6 +94,7 @@ Gib noch nicht sofort die Lösung.
 
 Ein kurzer Merksatz zum Thema.
 
+Wichtig:
 Wenn das Foto schlecht lesbar ist, bitte freundlich um ein schärferes Foto.
 `;
 
@@ -97,8 +107,14 @@ Wenn das Foto schlecht lesbar ist, bitte freundlich um ein schärferes Foto.
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userContent }
+          {
+            role: "system",
+            content: systemPrompt
+          },
+          {
+            role: "user",
+            content: userContent
+          }
         ],
         temperature: 0.4
       })
@@ -116,6 +132,8 @@ Wenn das Foto schlecht lesbar ist, bitte freundlich um ein schärferes Foto.
       reply: data.choices?.[0]?.message?.content || "Keine Antwort erhalten."
     });
   } catch (error) {
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({
+      error: error.message
+    });
   }
 }
