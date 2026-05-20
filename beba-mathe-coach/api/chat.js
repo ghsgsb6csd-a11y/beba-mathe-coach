@@ -1,73 +1,15 @@
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({
-      error: "Nur POST erlaubt"
-    });
+    return res.status(405).json({ error: "Nur POST erlaubt" });
   }
 
   try {
     const { message, imageBase64, history = [] } = req.body;
-
-    const apiKey =
-      process.env.OPENAI_API_KEY ||
-      process.env.openai_api_key;
+    const apiKey = process.env.OPENAI_API_KEY || process.env.openai_api_key;
 
     if (!apiKey) {
-      return res.status(500).json({
-        error: "OpenAI API-Key fehlt"
-      });
+      return res.status(500).json({ error: "OpenAI API-Key fehlt" });
     }
-
-    
-
-const systemPrompt = `
-Du bist BEBA, ein vorsichtiger Mathecoach für Schüler.
-
-OBERSTE REGEL:
-Wenn du eine Aufgabe auf dem Foto nicht sicher lesen kannst, darfst du NICHT raten.
-
-Bei Fotos gilt immer:
-
-1. Lies zuerst das Bild.
-2. Schreibe nur, was du wirklich erkennst.
-3. Wenn du unsicher bist, frage nach.
-4. Analysiere nur Rechnungen, die du klar erkennen kannst.
-5. Erfinde keine Aufgaben, keine Variablen, keine Formeln.
-6. Verwende kein LaTeX.
-7. Verwende kein x, außer x steht sichtbar im Bild.
-8. Wenn das Thema unklar ist, sage: "Ich bin mir beim Thema noch nicht sicher."
-
-Antwort bei Fotos:
-
-## Was ich sicher erkenne
-
-Nenne nur sicher erkannte Aufgaben oder Rechnungen.
-
-## Was ich noch nicht sicher lesen kann
-
-Nenne unklare Stellen.
-
-## Erste Fehlerprüfung
-
-Prüfe nur 1 bis 3 klar lesbare Rechnungen.
-
-Schreibe:
-- Rechnung:
-- Deine Lösung:
-- Richtig wäre:
-- Warum?
-
-## Lass uns zusammen weitermachen
-
-Stelle eine kurze Frage, zum Beispiel:
-"Welche Aufgabe soll ich als Erstes genau prüfen?"
-oder
-"Kannst du mir die Aufgabe oben noch einmal abtippen?"
-
-WICHTIG:
-Lieber ehrlich unsicher sein als falsch erklären.
-Antworte kurz, klar und wie ein freundlicher Lehrer.
-`;
 
     const safeHistory = history
       .filter((m) => m.role === "user" || m.role === "assistant")
@@ -77,26 +19,150 @@ Antworte kurz, klar und wie ein freundlicher Lehrer.
         content: String(m.content || "").slice(0, 1500)
       }));
 
-    const userContent = [
-      {
-        type: "text",
-        text:
-          message ||
-          "Bitte analysiere das Foto gründlich und hilf mir beim Lernen."
-      }
-    ];
+    let photoReading = null;
 
     if (imageBase64) {
-      userContent.push({
-        type: "image_url",
-        image_url: {
-          url: imageBase64,
-          detail: "high"
-        }
+      const readPrompt = `
+Du liest ein Foto eines Schul-Arbeitsblattes oder eines handschriftlichen Lösungswegs.
+
+AUFGABE:
+Lies nur das Bild. Erkläre noch nichts.
+
+WICHTIG:
+- Schreibe nur, was du wirklich erkennst.
+- Wenn etwas unsicher ist, markiere es als unsicher.
+- Erfinde keine Aufgaben.
+- Erfinde keine Variablen.
+- Verwende kein LaTeX.
+- Wenn kein x sichtbar ist, schreibe kein x.
+- Gib keine langen Erklärungen.
+
+Antworte als JSON mit:
+{
+  "sicher_erkannt": [],
+  "unsicher": [],
+  "sichtbare_rechnungen": [],
+  "moegliche_fehler": [],
+  "thema_vermutlich": "",
+  "lesbarkeit": "gut | mittel | schlecht"
+}
+`;
+
+      const readResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          temperature: 0,
+          max_tokens: 900,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: readPrompt },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Lies dieses Foto vorsichtig aus. Nicht erklären, nur erkennen."
+                },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: imageBase64,
+                    detail: "high"
+                  }
+                }
+              ]
+            }
+          ]
+        })
+      });
+
+      const readData = await readResponse.json();
+
+      if (!readResponse.ok) {
+        return res.status(500).json({
+          error: readData.error?.message || "Fehler beim Lesen des Fotos"
+        });
+      }
+
+      photoReading = readData.choices?.[0]?.message?.content || null;
+    }
+
+    const tutorPrompt = `
+Du bist BEBA, ein sehr guter Mathecoach für Schülerinnen und Schüler.
+
+Du sollst wie ein echter hilfreicher KI-Tutor antworten:
+- freundlich
+- geduldig
+- konkret
+- interaktiv
+- nicht zu lang
+- ohne erfundene Inhalte
+
+WICHTIG:
+- Nutze nur Informationen, die aus dem Foto oder dem Chat sicher hervorgehen.
+- Wenn etwas unsicher ist, sage es ehrlich.
+- Erfinde keine Aufgaben, keine Zahlen, keine Variablen.
+- Verwende kein LaTeX.
+- Schreibe niemals \\times oder \\text{}.
+- Schreibe Multiplikation normal, z. B. 7 · 3 = 21.
+- Wenn das Foto unklar ist, bitte gezielt um eine bessere Stelle oder Abschrift.
+
+Bei einer Fotoanalyse antworte so:
+
+## Was ich erkennen kann
+
+Kurz zusammenfassen.
+
+## Mögliche Fehler
+
+Prüfe nur klar erkennbare Rechnungen.
+Bei jeder Rechnung:
+- Was steht da?
+- Ist es richtig?
+- Falls falsch: Warum?
+
+## Lass uns das verbessern
+
+Verbessere 1 bis 2 Stellen langsam.
+
+## Du bist dran
+
+Stelle eine kurze Frage, damit der Schüler weitermachen kann.
+
+Wenn der Schüler nur nachfragt, antworte direkt auf die Nachfrage und wiederhole nicht die ganze Struktur.
+`;
+
+    const userText =
+      message ||
+      "Bitte hilf mir mit der Aufgabe und erkläre mir mögliche Fehler.";
+
+    const tutorMessages = [
+      { role: "system", content: tutorPrompt },
+      ...safeHistory
+    ];
+
+    if (photoReading) {
+      tutorMessages.push({
+        role: "user",
+        content:
+          "Hier ist die vorsichtige Foto-Auslesung als Grundlage. Nutze nur diese Informationen und sei ehrlich bei Unsicherheit:\n\n" +
+          photoReading +
+          "\n\nMeine Frage dazu:\n" +
+          userText
+      });
+    } else {
+      tutorMessages.push({
+        role: "user",
+        content: userText
       });
     }
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const tutorResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -104,38 +170,26 @@ Antworte kurz, klar und wie ein freundlicher Lehrer.
       },
       body: JSON.stringify({
         model: "gpt-4o",
-        temperature: 0,
-        max_tokens: 500,
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt
-          },
-          ...safeHistory,
-          {
-            role: "user",
-            content: userContent
-          }
-        ]
+        temperature: 0.2,
+        max_tokens: 1000,
+        messages: tutorMessages
       })
     });
 
-    const data = await response.json();
+    const tutorData = await tutorResponse.json();
 
-    if (!response.ok) {
+    if (!tutorResponse.ok) {
       return res.status(500).json({
-        error: data.error?.message || "OpenAI Fehler"
+        error: tutorData.error?.message || "OpenAI Fehler"
       });
     }
 
     return res.status(200).json({
-      reply:
-        data.choices?.[0]?.message?.content ||
-        "Keine Antwort erhalten."
+      reply: tutorData.choices?.[0]?.message?.content || "Keine Antwort erhalten."
     });
   } catch (error) {
     return res.status(500).json({
-      error: error.message
+      error: error.message || "Unbekannter Fehler"
     });
   }
 }
