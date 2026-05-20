@@ -4,63 +4,30 @@ export default function App() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      text: "Hallo 👋 Ich bin dein BEBA-Mathecoach. Schicke mir eine Aufgabe aus deiner Mathearbeit."
+      text: "Hallo 👋 Ich bin dein BEBA-Mathecoach."
     }
   ]);
 
   const [input, setInput] = useState("");
 
-  async function sendMessage() {
-    if (!input.trim()) return;
+  function sendMessage() {
+    alert("Button funktioniert!");
 
-    const currentInput = input;
+    if (!input.trim()) return;
 
     setMessages((prev) => [
       ...prev,
       {
         role: "user",
-        text: currentInput
+        text: input
       },
       {
         role: "assistant",
-        text: "Ich denke kurz nach..."
+        text: "Test erfolgreich: React funktioniert."
       }
     ]);
 
     setInput("");
-
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          message: currentInput
-        })
-      });
-
-      const data = await response.json();
-
-      setMessages((prev) => [
-        ...prev.slice(0, -1),
-        {
-          role: "assistant",
-          text:
-            data.reply ||
-            data.error ||
-            "Keine Antwort von der KI erhalten."
-        }
-      ]);
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev.slice(0, -1),
-        {
-          role: "assistant",
-          text: "Fehler: " + error.message
-        }
-      ]);
-    }
   }
 
   return (
