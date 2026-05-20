@@ -121,8 +121,8 @@ WICHTIG:
       },
       body: JSON.stringify({
         model: "gpt-4o",
-        temperature: 0.1,
-        max_tokens: 700,
+        temperature: 0,
+        max_tokens: 400,
         messages: [
           {
             role: "system",
