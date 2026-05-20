@@ -131,7 +131,12 @@ export default function App() {
       >
         <h2>1. Aufgabe hochladen</h2>
 
-        <input type="file" accept="image/*" onChange={handleImageUpload} />
+       <input
+  type="file"
+  accept="image/*"
+  capture="environment"
+  onChange={handleImageUpload}
+/>
 
         {imagePreview && (
           <div style={{ marginTop: "16px" }}>
