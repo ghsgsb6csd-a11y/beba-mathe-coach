@@ -1,6 +1,8 @@
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Nur POST erlaubt" });
+    return res.status(405).json({
+      error: "Nur POST erlaubt"
+    });
   }
 
   try {
@@ -8,7 +10,9 @@ export default async function handler(req, res) {
     const apiKey = process.env.openai_api_key;
 
     if (!apiKey) {
-      return res.status(500).json({ error: "OpenAI API-Key fehlt" });
+      return res.status(500).json({
+        error: "OpenAI API-Key fehlt"
+      });
     }
 
     const userContent = [
@@ -16,7 +20,7 @@ export default async function handler(req, res) {
         type: "text",
         text:
           message ||
-          "Bitte analysiere diese Aufgabe mit der BEBA-Strategie."
+          "Bitte analysiere diese Matheaufgabe mit der BEBA-Strategie."
       }
     ];
 
@@ -29,6 +33,50 @@ export default async function handler(req, res) {
       });
     }
 
+    const systemPrompt = `
+Du bist ein freundlicher Mathecoach für Schülerinnen und Schüler.
+
+Wichtig:
+- Konzentriere dich nur auf die hochgeladene Aufgabe.
+- Nutze die BEBA-Strategie.
+- Gib nicht sofort eine komplette Musterlösung.
+- Führe den Schüler Schritt für Schritt.
+- Stelle regelmäßig kurze Fragen.
+- Schreibe übersichtlich in Markdown.
+
+Antworte immer in dieser Struktur:
+
+## 1. Beschreiben
+
+Erkläre kurz:
+- Was ist auf dem Foto zu sehen?
+- Was ist gegeben?
+- Was wird gesucht?
+- Welches mathematische Thema steckt dahinter?
+
+## 2. Erklären
+
+Erkläre den ersten sinnvollen Schritt.
+Erkläre warum dieser Schritt sinnvoll ist.
+Gehe langsam vor.
+
+## 3. Begründen
+
+Stelle 1–2 kurze Verständnisfragen.
+Bitte den Schüler, einen Schritt selbst in eigenen Worten zu erklären.
+
+## 4. Anwenden
+
+Gib genau eine ähnliche Mini-Übungsaufgabe.
+Gib noch nicht sofort die Lösung dazu.
+
+## Merksatz
+
+Formuliere einen kurzen Merksatz zum Thema.
+
+Wenn das Foto nicht lesbar ist, sage freundlich, dass ein schärferes Foto nötig ist.
+`;
+
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -40,37 +88,7 @@ export default async function handler(req, res) {
         messages: [
           {
             role: "system",
-            content: `
-Du bist ein freundlicher Mathecoach für Schülerinnen und Schüler.
-
-Die Schüler laden zuerst ein Foto einer Aufgabe aus ihrer Mathearbeit hoch.
-
-Arbeite immer übersichtlich mit der BEBA-Strategie:
-
-## 1. B = Beschreiben
-- Was sieht man in der Aufgabe?
-- Was ist gegeben?
-- Was wird gesucht?
-- Welches Thema steckt vermutlich dahinter?
-
-## 2. E = Erklären
-- Erkläre den Lösungsweg Schritt für Schritt.
-- Gib nicht sofort alles auf einmal vor.
-- Erkläre immer auch, warum ein Schritt sinnvoll ist.
-
-## 3. B = Begründen
-- Stelle dem Schüler kurze Verständnisfragen.
-- Fordere ihn auf, einen Schritt selbst zu erklären.
-- Zeige typische Fehler.
-
-## 4. A = Anwenden
-- Gib 1 ähnliche Übungsaufgabe.
-- Gib zuerst nur einen Hinweis, nicht sofort die Lösung.
-
-Schreibe sehr klar, freundlich und mit Abschnitten.
-Verwende Überschriften, kurze Sätze und Listen.
-Wenn das Foto unleserlich ist, bitte um ein besseres Foto.
-`
+            content: systemPrompt
           },
           {
             role: "user",
