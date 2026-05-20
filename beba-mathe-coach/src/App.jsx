@@ -1,62 +1,52 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 
 export default function App() {
-  const fileInputRef = useRef(null);
-
   const [messages, setMessages] = useState([
     {
       role: "assistant",
       text:
         "# 👋 Willkommen beim BEBA-Mathecoach\n\n" +
         "Fotografiere deine Aufgabe oder deinen Lösungsweg.\n\n" +
-        "Ich erkenne Handschrift, analysiere Fehler und helfe dir Schritt für Schritt."
+        "Ich lese die Handschrift, suche mögliche Fehler und helfe dir Schritt für Schritt mit BEBA."
     }
   ]);
 
   const [input, setInput] = useState("");
-  const [image, setImage] = useState(null);
+  const [imageBase64, setImageBase64] = useState("");
   const [imagePreview, setImagePreview] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function openCamera() {
-    fileInputRef.current?.click();
-  }
-
   function handleImageUpload(e) {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
 
-    setImage(file);
-    setImagePreview(URL.createObjectURL(file));
-  }
+    const reader = new FileReader();
 
-  function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result;
+      setImageBase64(base64);
+      setImagePreview(base64);
+    };
 
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-
-      reader.readAsDataURL(file);
-    });
+    reader.readAsDataURL(file);
   }
 
   async function sendMessage() {
-    if (!input.trim() && !image) return;
+    if (!input.trim() && !imageBase64) return;
 
     const userText =
       input.trim() ||
-      "Bitte analysiere das Foto und finde mögliche Fehler.";
+      "Bitte analysiere das Foto. Lies die Handschrift, finde mögliche Fehler und hilf mir mit BEBA.";
 
-    const preview = imagePreview;
+    const currentImage = imagePreview;
 
     setMessages((prev) => [
       ...prev,
       {
         role: "user",
         text: userText,
-        image: preview
+        image: currentImage
       }
     ]);
 
@@ -64,12 +54,6 @@ export default function App() {
     setLoading(true);
 
     try {
-      let imageBase64 = null;
-
-      if (image) {
-        imageBase64 = await fileToBase64(image);
-      }
-
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
@@ -87,18 +71,18 @@ export default function App() {
         ...prev,
         {
           role: "assistant",
-          text: data.reply || "Keine Antwort erhalten."
+          text: data.reply || data.error || "Keine Antwort erhalten."
         }
       ]);
 
-      setImage(null);
+      setImageBase64("");
       setImagePreview("");
     } catch (error) {
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: `# Fehler\n\n${error.message}`
+          text: "# Fehler\n\n" + error.message
         }
       ]);
     }
@@ -112,51 +96,41 @@ export default function App() {
         role: "assistant",
         text:
           "# Neue Aufgabe ✅\n\n" +
-          "Fotografiere jetzt die nächste Matheaufgabe."
+          "Fotografiere jetzt deine nächste Matheaufgabe."
       }
     ]);
 
     setInput("");
-    setImage(null);
+    setImageBase64("");
     setImagePreview("");
   }
 
   return (
     <div
       style={{
-        background: "#f5f7fb",
         minHeight: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        padding: "20px"
+        background: "#f5f7fb",
+        fontFamily: "Arial, sans-serif",
+        padding: "16px",
+        boxSizing: "border-box"
       }}
     >
       <div
         style={{
-          width: "100%",
           maxWidth: "900px",
-          display: "flex",
-          flexDirection: "column"
+          margin: "0 auto"
         }}
       >
-        <h1
-          style={{
-            textAlign: "center",
-            marginBottom: "20px"
-          }}
-        >
-          📘 BEBA-Mathecoach
-        </h1>
+        <h1 style={{ textAlign: "center" }}>📘 BEBA-Mathecoach</h1>
 
         <div
           style={{
-            flex: 1,
             background: "white",
-            borderRadius: "20px",
-            padding: "20px",
-            overflowY: "auto",
-            minHeight: "70vh",
-            boxShadow: "0 4px 18px rgba(0,0,0,0.08)"
+            borderRadius: "18px",
+            padding: "16px",
+            minHeight: "55vh",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+            marginBottom: "16px"
           }}
         >
           {messages.map((msg, index) => (
@@ -166,29 +140,33 @@ export default function App() {
                 display: "flex",
                 justifyContent:
                   msg.role === "user" ? "flex-end" : "flex-start",
-                marginBottom: "18px"
+                marginBottom: "16px"
               }}
             >
               <div
                 style={{
+                  maxWidth: "90%",
                   background:
                     msg.role === "user" ? "#2563eb" : "#f1f5f9",
-                  color: msg.role === "user" ? "white" : "#111",
-                  padding: "16px",
-                  borderRadius: "18px",
-                  maxWidth: "85%",
+                  color: msg.role === "user" ? "white" : "#111827",
+                  borderRadius: "16px",
+                  padding: "14px",
                   lineHeight: "1.6",
-                  fontSize: "16px"
+                  fontSize: "16px",
+                  overflowWrap: "break-word"
                 }}
               >
                 {msg.image && (
                   <img
                     src={msg.image}
-                    alt="Aufgabe"
+                    alt="Hochgeladene Aufgabe"
                     style={{
                       width: "100%",
+                      maxHeight: "320px",
+                      objectFit: "contain",
                       borderRadius: "12px",
-                      marginBottom: "12px"
+                      marginBottom: "10px",
+                      background: "white"
                     }}
                   />
                 )}
@@ -201,10 +179,10 @@ export default function App() {
           {loading && (
             <div
               style={{
+                display: "inline-block",
                 background: "#f1f5f9",
-                padding: "16px",
-                borderRadius: "16px",
-                display: "inline-block"
+                padding: "14px",
+                borderRadius: "16px"
               }}
             >
               📖 Ich lese die Handschrift und analysiere die Aufgabe...
@@ -215,109 +193,127 @@ export default function App() {
         {imagePreview && (
           <div
             style={{
-              marginTop: "14px",
               background: "white",
+              borderRadius: "14px",
               padding: "12px",
-              borderRadius: "14px"
+              marginBottom: "12px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)"
             }}
           >
+            <p style={{ marginTop: 0 }}>Ausgewähltes Foto:</p>
+
             <img
               src={imagePreview}
               alt="Vorschau"
               style={{
                 width: "140px",
-                borderRadius: "12px"
+                maxHeight: "180px",
+                objectFit: "cover",
+                borderRadius: "12px",
+                display: "block",
+                marginBottom: "10px"
               }}
             />
+
+            <button
+              onClick={() => {
+                setImageBase64("");
+                setImagePreview("");
+              }}
+              style={{
+                border: "none",
+                background: "#e5e7eb",
+                padding: "10px 14px",
+                borderRadius: "10px",
+                cursor: "pointer"
+              }}
+            >
+              Foto entfernen
+            </button>
           </div>
         )}
 
         <div
           style={{
-            marginTop: "16px",
             background: "white",
             borderRadius: "18px",
             padding: "14px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.08)"
+            boxShadow: "0 4px 14px rgba(0,0,0,0.08)"
           }}
         >
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Was verstehst du nicht?"
+            placeholder="Schreibe optional dazu, was du nicht verstehst..."
             rows={3}
             style={{
               width: "100%",
-              border: "none",
-              resize: "none",
-              outline: "none",
-              fontSize: "16px"
+              border: "1px solid #ddd",
+              borderRadius: "12px",
+              padding: "12px",
+              fontSize: "16px",
+              boxSizing: "border-box",
+              resize: "none"
             }}
           />
 
           <div
             style={{
               display: "flex",
-              justifyContent: "space-between",
+              gap: "10px",
               marginTop: "12px",
-              gap: "10px"
+              flexWrap: "wrap"
             }}
           >
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button
-                onClick={openCamera}
-                style={{
-                  border: "none",
-                  background: "#2563eb",
-                  color: "white",
-                  borderRadius: "12px",
-                  padding: "12px 16px",
-                  cursor: "pointer",
-                  fontSize: "18px"
-                }}
-              >
-                📷
-              </button>
-
-              <button
-                onClick={resetChat}
-                style={{
-                  border: "none",
-                  background: "#e5e7eb",
-                  borderRadius: "12px",
-                  padding: "12px 16px",
-                  cursor: "pointer"
-                }}
-              >
-                Neu
-              </button>
-            </div>
+            <label
+              style={{
+                background: "#2563eb",
+                color: "white",
+                borderRadius: "12px",
+                padding: "12px 16px",
+                cursor: "pointer",
+                fontSize: "16px",
+                display: "inline-block"
+              }}
+            >
+              📷 Foto aufnehmen
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                style={{ display: "none" }}
+              />
+            </label>
 
             <button
               onClick={sendMessage}
               disabled={loading}
               style={{
                 border: "none",
-                background: "#16a34a",
+                background: loading ? "#9ca3af" : "#16a34a",
                 color: "white",
                 borderRadius: "12px",
-                padding: "12px 20px",
-                cursor: "pointer",
+                padding: "12px 18px",
+                cursor: loading ? "not-allowed" : "pointer",
                 fontWeight: "bold"
               }}
             >
-              Senden
+              {loading ? "Analysiere..." : "Senden"}
+            </button>
+
+            <button
+              onClick={resetChat}
+              style={{
+                border: "none",
+                background: "#e5e7eb",
+                borderRadius: "12px",
+                padding: "12px 18px",
+                cursor: "pointer"
+              }}
+            >
+              Neu
             </button>
           </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleImageUpload}
-            style={{ display: "none" }}
-          />
         </div>
       </div>
     </div>
