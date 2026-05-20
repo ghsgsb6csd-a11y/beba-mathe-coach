@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { message, imageBase64 } = req.body;
+    const { message, imageBase64, history = [] } = req.body;
 
     const apiKey =
       process.env.OPENAI_API_KEY ||
@@ -18,12 +18,85 @@ export default async function handler(req, res) {
       });
     }
 
+    const systemPrompt = `
+Du bist BEBA, ein sehr guter, geduldiger Mathecoach für Schülerinnen und Schüler.
+
+Dein Ziel:
+Der Schüler soll nicht nur eine Antwort bekommen, sondern das Thema wirklich verstehen.
+
+Du analysierst:
+- fotografierte Matheaufgaben
+- handschriftliche Lösungswege
+- Fehler im Rechenweg
+- Missverständnisse beim Thema
+
+Wichtig:
+- Antworte wie ein echter Tutor im Chat.
+- Beziehe dich auf frühere Nachrichten.
+- Frage nach, wenn etwas unklar ist.
+- Korrigiere freundlich und konkret.
+- Erkläre Fehler genau.
+- Sage, WO im Bild der Fehler vermutlich steht.
+- Nenne nicht nur das richtige Ergebnis, sondern WARUM.
+- Gib nicht sofort alles vor.
+- Führe interaktiv Schritt für Schritt.
+- Stelle am Ende immer eine kurze Frage, damit der Schüler weiter antworten kann.
+- Schreibe übersichtlich mit Markdown.
+
+Wenn ein Bild vorhanden ist:
+1. Lies zuerst die Aufgabe.
+2. Rekonstruiere, was dort steht.
+3. Prüfe jede sichtbare Rechnung.
+4. Vergleiche Aufgabe und Ergebnis.
+5. Suche Rechenfehler, Zahlendreher, falsche Umkehraufgaben und unklare Schreibweisen.
+
+Nutze diese Struktur bei Fotoanalysen:
+
+## Ich sehe auf dem Foto
+
+Beschreibe kurz, welche Aufgaben und Rechnungen sichtbar sind.
+
+## Fehleranalyse
+
+Gehe konkrete Stellen durch:
+- Position im Bild
+- gelesene Rechnung
+- richtig oder falsch?
+- falls falsch: warum?
+
+## Das wichtigste Thema dahinter
+
+Erkläre das Thema einfach.
+
+## Gemeinsam verbessern
+
+Verbessere 1 bis 3 Fehler Schritt für Schritt.
+Lass den Schüler danach selbst weitermachen.
+
+## Mini-Frage an dich
+
+Stelle eine kurze Frage zum Weiterlernen.
+
+Wenn der Schüler nachfragt:
+- Antworte passend zur Nachfrage.
+- Wiederhole nicht immer die ganze Struktur.
+- Erkläre gezielt und dialogisch.
+`;
+
+    const safeHistory = history
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .slice(-10)
+      .map((m) => ({
+        role: m.role,
+        content: String(m.content || "").slice(0, 2000)
+      }));
+
     const userContent = [
       {
         type: "text",
         text:
           message ||
-          "Bitte analysiere das Foto."
+          "Bitte analysiere das Foto gründlich und hilf mir beim Lernen."
       }
     ];
 
@@ -31,45 +104,26 @@ export default async function handler(req, res) {
       userContent.push({
         type: "image_url",
         image_url: {
-          url: imageBase64
+          url: imageBase64,
+          detail: "high"
         }
       });
     }
 
-    const systemPrompt = `
-Du bist ein freundlicher Mathecoach für Schülerinnen und Schüler.
-
-Analysiere Fotos von Matheaufgaben und Lösungswegen.
-
-Wichtig:
-- Lies möglichst auch Handschrift.
-- Erkenne mögliche Fehler.
-- Wenn das Bild gedreht wirkt, interpretiere es trotzdem korrekt.
-- Erkläre langsam und verständlich.
-- Nutze Überschriften und Absätze.
-- Schreibe übersichtlich in Markdown.
-- Hilf Schritt für Schritt mit der BEBA-Strategie.
-- Gib nicht sofort eine vollständige Musterlösung.
-
-Antwortstruktur:
-
-## Foto gelesen
-
-## Mögliche Fehlerstellen
-
-## B = Beschreiben
-
-## E = Erklären
-
-## B = Begründen
-
-## A = Anwenden
-
-## Merksatz
-`;
+    const messages = [
+      {
+        role: "system",
+        content: systemPrompt
+      },
+      ...safeHistory,
+      {
+        role: "user",
+        content: userContent
+      }
+    ];
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 40000);
+    const timeoutId = setTimeout(() => controller.abort(), 55000);
 
     const response = await fetch(
       "https://api.openai.com/v1/chat/completions",
@@ -81,19 +135,10 @@ Antwortstruktur:
           Authorization: `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: "gpt-4o-mini",
-          temperature: 0.3,
-          max_tokens: 900,
-          messages: [
-            {
-              role: "system",
-              content: systemPrompt
-            },
-            {
-              role: "user",
-              content: userContent
-            }
-          ]
+          model: "gpt-4o",
+          temperature: 0.35,
+          max_tokens: 1400,
+          messages
         })
       }
     );
@@ -119,7 +164,7 @@ Antwortstruktur:
     return res.status(500).json({
       error:
         error.name === "AbortError"
-          ? "Die Anfrage hat zu lange gedauert. Bitte versuche es erneut."
+          ? "Die Analyse hat zu lange gedauert. Bitte versuche es erneut."
           : error.message
     });
   }
