@@ -1,17 +1,19 @@
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
 
 export default function App() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
       text:
-        "Hallo 👋 Ich bin dein BEBA-Mathecoach.\n\nBitte lade zuerst ein Foto von der Aufgabe hoch, die du verbessern möchtest. Danach begleite ich dich Schritt für Schritt."
+        "Hallo 👋\n\nLade zuerst ein Foto von der Aufgabe hoch, die du verbessern möchtest.\n\nDanach begleite ich dich Schritt für Schritt mit der BEBA-Strategie."
     }
   ]);
 
   const [input, setInput] = useState("");
   const [image, setImage] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
+  const [loading, setLoading] = useState(false);
 
   function handleImageUpload(e) {
     const file = e.target.files[0];
@@ -19,15 +21,6 @@ export default function App() {
 
     setImage(file);
     setImagePreview(URL.createObjectURL(file));
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "assistant",
-        text:
-          "Super, das Foto ist ausgewählt. Schreibe jetzt kurz dazu, was du verbessern möchtest — oder klicke direkt auf „Absenden“."
-      }
-    ]);
   }
 
   function fileToBase64(file) {
@@ -39,19 +32,35 @@ export default function App() {
     });
   }
 
-  async function sendMessage() {
-    if (!input.trim() && !image) return;
+  function resetTask() {
+    setMessages([
+      {
+        role: "assistant",
+        text:
+          "Neue Aufgabe gestartet ✅\n\nLade bitte wieder ein Foto der Aufgabe hoch."
+      }
+    ]);
+    setInput("");
+    setImage(null);
+    setImagePreview("");
+  }
 
-    const currentInput = input || "Bitte analysiere diese Matheaufgabe mit der BEBA-Strategie.";
+  async function sendMessage() {
+    if (!image && !input.trim()) return;
+
+    const currentInput =
+      input.trim() ||
+      "Bitte hilf mir, diese Aufgabe mit der BEBA-Strategie zu verstehen.";
     const currentImage = image;
 
     setMessages((prev) => [
       ...prev,
       { role: "user", text: currentInput },
-      { role: "assistant", text: "Ich schaue mir die Aufgabe an..." }
+      { role: "assistant", text: "Ich schaue mir die Aufgabe genau an..." }
     ]);
 
     setInput("");
+    setLoading(true);
 
     try {
       let imageBase64 = null;
@@ -89,47 +98,85 @@ export default function App() {
         }
       ]);
     }
+
+    setLoading(false);
   }
 
   return (
-    <div style={{ fontFamily: "Arial", maxWidth: "850px", margin: "0 auto", padding: "20px" }}>
+    <div
+      style={{
+        fontFamily: "Arial, sans-serif",
+        maxWidth: "900px",
+        margin: "0 auto",
+        padding: "24px",
+        lineHeight: "1.5"
+      }}
+    >
       <h1>📘 BEBA-Mathecoach</h1>
 
       <p>
-        Lade ein Foto deiner Aufgabe hoch. Die KI hilft dir, sie mit der BEBA-Strategie zu verstehen.
+        Lade ein Foto deiner Aufgabe hoch. Der Coach konzentriert sich nur auf
+        diese Aufgabe und führt dich durch Beschreiben, Erklären, Begründen und
+        Anwenden.
       </p>
 
-      <div style={{ marginBottom: "20px", padding: "15px", border: "1px solid #ddd", borderRadius: "10px" }}>
-        <strong>1. Foto hochladen</strong>
-        <br />
-        <input type="file" accept="image/*" onChange={handleImageUpload} style={{ marginTop: "10px" }} />
+      <div
+        style={{
+          padding: "18px",
+          border: "1px solid #ddd",
+          borderRadius: "12px",
+          marginBottom: "20px",
+          background: "#fafafa"
+        }}
+      >
+        <h2>1. Aufgabe hochladen</h2>
+
+        <input type="file" accept="image/*" onChange={handleImageUpload} />
 
         {imagePreview && (
-          <div style={{ marginTop: "15px" }}>
+          <div style={{ marginTop: "16px" }}>
             <img
               src={imagePreview}
               alt="Hochgeladene Aufgabe"
-              style={{ maxWidth: "100%", borderRadius: "10px", border: "1px solid #ccc" }}
+              style={{
+                maxWidth: "100%",
+                borderRadius: "10px",
+                border: "1px solid #ccc"
+              }}
             />
           </div>
         )}
       </div>
 
-      <div style={{ border: "1px solid #ccc", borderRadius: "10px", padding: "20px", minHeight: "400px", marginBottom: "20px" }}>
+      <div
+        style={{
+          border: "1px solid #ccc",
+          borderRadius: "12px",
+          padding: "20px",
+          minHeight: "420px",
+          marginBottom: "20px",
+          background: "white"
+        }}
+      >
         {messages.map((msg, index) => (
-          <div key={index} style={{ marginBottom: "15px", textAlign: msg.role === "user" ? "right" : "left" }}>
+          <div
+            key={index}
+            style={{
+              marginBottom: "18px",
+              textAlign: msg.role === "user" ? "right" : "left"
+            }}
+          >
             <div
               style={{
                 display: "inline-block",
-                padding: "12px",
-                borderRadius: "10px",
+                textAlign: "left",
+                padding: "14px 16px",
+                borderRadius: "12px",
                 background: msg.role === "user" ? "#dbeafe" : "#f3f4f6",
-                whiteSpace: "pre-wrap",
-                lineHeight: "1.5",
-                maxWidth: "90%"
+                maxWidth: "92%"
               }}
             >
-              {msg.text}
+              <ReactMarkdown>{msg.text}</ReactMarkdown>
             </div>
           </div>
         ))}
@@ -138,14 +185,42 @@ export default function App() {
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        placeholder="Optional: Was möchtest du verbessern? Zum Beispiel: Ich habe den Ansatz nicht verstanden."
+        placeholder="Optional: Was war schwierig? Zum Beispiel: Ich verstehe den Ansatz nicht."
         rows={4}
-        style={{ width: "100%", padding: "10px", marginBottom: "10px" }}
+        style={{
+          width: "100%",
+          padding: "12px",
+          marginBottom: "12px",
+          borderRadius: "10px",
+          border: "1px solid #ccc",
+          fontSize: "16px"
+        }}
       />
 
-      <button onClick={sendMessage} style={{ padding: "12px 22px", fontSize: "16px", cursor: "pointer" }}>
-        Aufgabe absenden
-      </button>
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <button
+          onClick={sendMessage}
+          disabled={loading}
+          style={{
+            padding: "12px 22px",
+            fontSize: "16px",
+            cursor: loading ? "not-allowed" : "pointer"
+          }}
+        >
+          {loading ? "Analysiere..." : "Aufgabe verbessern"}
+        </button>
+
+        <button
+          onClick={resetTask}
+          style={{
+            padding: "12px 22px",
+            fontSize: "16px",
+            cursor: "pointer"
+          }}
+        >
+          Neue Aufgabe starten
+        </button>
+      </div>
     </div>
   );
 }
