@@ -8,7 +8,7 @@ export default function App() {
       text:
         "# 👋 Willkommen beim BEBA-Mathecoach\n\n" +
         "Fotografiere deine Aufgabe oder deinen Lösungsweg.\n\n" +
-        "Ich lese die Handschrift, suche mögliche Fehler und helfe dir Schritt für Schritt mit BEBA."
+        "Ich erkenne Handschrift, finde mögliche Fehler und helfe dir Schritt für Schritt."
     }
   ]);
 
@@ -17,19 +17,60 @@ export default function App() {
   const [imagePreview, setImagePreview] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function handleImageUpload(e) {
+  function compressImage(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        img.src = reader.result;
+      };
+
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+
+        const maxWidth = 1000;
+        const scale = Math.min(maxWidth / img.width, 1);
+
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+
+        const ctx = canvas.getContext("2d");
+
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        const compressedBase64 = canvas.toDataURL(
+          "image/jpeg",
+          0.7
+        );
+
+        resolve(compressedBase64);
+      };
+
+      img.onerror = reject;
+      reader.onerror = reject;
+
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleImageUpload(e) {
     const file = e.target.files?.[0];
+
     if (!file) return;
 
-    const reader = new FileReader();
+    try {
+      setLoading(true);
 
-    reader.onloadend = () => {
-      const base64 = reader.result;
-      setImageBase64(base64);
-      setImagePreview(base64);
-    };
+      const compressed = await compressImage(file);
 
-    reader.readAsDataURL(file);
+      setImageBase64(compressed);
+      setImagePreview(compressed);
+    } catch (error) {
+      alert("Fehler beim Verarbeiten des Bildes.");
+    }
+
+    setLoading(false);
   }
 
   async function sendMessage() {
@@ -37,7 +78,7 @@ export default function App() {
 
     const userText =
       input.trim() ||
-      "Bitte analysiere das Foto. Lies die Handschrift, finde mögliche Fehler und hilf mir mit BEBA.";
+      "Bitte analysiere das Foto und finde mögliche Fehler.";
 
     const currentImage = imagePreview;
 
@@ -54,6 +95,8 @@ export default function App() {
     setLoading(true);
 
     try {
+      console.log("Sende Anfrage...");
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
@@ -71,7 +114,10 @@ export default function App() {
         ...prev,
         {
           role: "assistant",
-          text: data.reply || data.error || "Keine Antwort erhalten."
+          text:
+            data.reply ||
+            data.error ||
+            "Keine Antwort erhalten."
         }
       ]);
 
@@ -82,7 +128,9 @@ export default function App() {
         ...prev,
         {
           role: "assistant",
-          text: "# Fehler\n\n" + error.message
+          text:
+            "# Fehler\n\n" +
+            (error.message || "Unbekannter Fehler")
         }
       ]);
     }
@@ -121,14 +169,21 @@ export default function App() {
           margin: "0 auto"
         }}
       >
-        <h1 style={{ textAlign: "center" }}>📘 BEBA-Mathecoach</h1>
+        <h1
+          style={{
+            textAlign: "center",
+            marginBottom: "20px"
+          }}
+        >
+          📘 BEBA-Mathecoach
+        </h1>
 
         <div
           style={{
             background: "white",
             borderRadius: "18px",
             padding: "16px",
-            minHeight: "55vh",
+            minHeight: "60vh",
             boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
             marginBottom: "16px"
           }}
@@ -139,7 +194,9 @@ export default function App() {
               style={{
                 display: "flex",
                 justifyContent:
-                  msg.role === "user" ? "flex-end" : "flex-start",
+                  msg.role === "user"
+                    ? "flex-end"
+                    : "flex-start",
                 marginBottom: "16px"
               }}
             >
@@ -147,9 +204,14 @@ export default function App() {
                 style={{
                   maxWidth: "90%",
                   background:
-                    msg.role === "user" ? "#2563eb" : "#f1f5f9",
-                  color: msg.role === "user" ? "white" : "#111827",
-                  borderRadius: "16px",
+                    msg.role === "user"
+                      ? "#2563eb"
+                      : "#f1f5f9",
+                  color:
+                    msg.role === "user"
+                      ? "white"
+                      : "#111827",
+                  borderRadius: "18px",
                   padding: "14px",
                   lineHeight: "1.6",
                   fontSize: "16px",
@@ -159,19 +221,21 @@ export default function App() {
                 {msg.image && (
                   <img
                     src={msg.image}
-                    alt="Hochgeladene Aufgabe"
+                    alt="Aufgabe"
                     style={{
                       width: "100%",
                       maxHeight: "320px",
                       objectFit: "contain",
                       borderRadius: "12px",
-                      marginBottom: "10px",
+                      marginBottom: "12px",
                       background: "white"
                     }}
                   />
                 )}
 
-                <ReactMarkdown>{msg.text}</ReactMarkdown>
+                <ReactMarkdown>
+                  {msg.text}
+                </ReactMarkdown>
               </div>
             </div>
           ))}
@@ -182,7 +246,8 @@ export default function App() {
                 display: "inline-block",
                 background: "#f1f5f9",
                 padding: "14px",
-                borderRadius: "16px"
+                borderRadius: "16px",
+                color: "#555"
               }}
             >
               📖 Ich lese die Handschrift und analysiere die Aufgabe...
@@ -196,19 +261,19 @@ export default function App() {
               background: "white",
               borderRadius: "14px",
               padding: "12px",
-              marginBottom: "12px",
+              marginBottom: "14px",
               boxShadow: "0 2px 8px rgba(0,0,0,0.08)"
             }}
           >
-            <p style={{ marginTop: 0 }}>Ausgewähltes Foto:</p>
+            <p style={{ marginTop: 0 }}>
+              Ausgewähltes Foto:
+            </p>
 
             <img
               src={imagePreview}
               alt="Vorschau"
               style={{
                 width: "140px",
-                maxHeight: "180px",
-                objectFit: "cover",
                 borderRadius: "12px",
                 display: "block",
                 marginBottom: "10px"
@@ -243,8 +308,10 @@ export default function App() {
         >
           <textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Schreibe optional dazu, was du nicht verstehst..."
+            onChange={(e) =>
+              setInput(e.target.value)
+            }
+            placeholder="Was verstehst du nicht?"
             rows={3}
             style={{
               width: "100%",
@@ -272,11 +339,11 @@ export default function App() {
                 borderRadius: "12px",
                 padding: "12px 16px",
                 cursor: "pointer",
-                fontSize: "16px",
-                display: "inline-block"
+                fontSize: "16px"
               }}
             >
               📷 Foto aufnehmen
+
               <input
                 type="file"
                 accept="image/*"
@@ -290,15 +357,23 @@ export default function App() {
               disabled={loading}
               style={{
                 border: "none",
-                background: loading ? "#9ca3af" : "#16a34a",
+                background:
+                  loading
+                    ? "#9ca3af"
+                    : "#16a34a",
                 color: "white",
                 borderRadius: "12px",
                 padding: "12px 18px",
-                cursor: loading ? "not-allowed" : "pointer",
+                cursor:
+                  loading
+                    ? "not-allowed"
+                    : "pointer",
                 fontWeight: "bold"
               }}
             >
-              {loading ? "Analysiere..." : "Senden"}
+              {loading
+                ? "Analysiere..."
+                : "Senden"}
             </button>
 
             <button
