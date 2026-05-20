@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { message, imageBase64, history = [] } = req.body;
+    const { mode = "photo", message, imageBase64, history = [] } = req.body;
     const apiKey = process.env.OPENAI_API_KEY || process.env.openai_api_key;
 
     if (!apiKey) {
@@ -18,6 +18,147 @@ export default async function handler(req, res) {
         role: m.role,
         content: String(m.content || "").slice(0, 1500)
       }));
+
+    const photoTutorPrompt = `
+Du bist BEBA, ein sehr guter Mathecoach für Schülerinnen und Schüler.
+
+Du sollst wie ein echter hilfreicher KI-Tutor antworten:
+- freundlich
+- geduldig
+- konkret
+- interaktiv
+- nicht zu lang
+- ohne erfundene Inhalte
+
+WICHTIG:
+- Nutze nur Informationen, die aus dem Foto oder dem Chat sicher hervorgehen.
+- Wenn etwas unsicher ist, sage es ehrlich.
+- Erfinde keine Aufgaben, keine Zahlen, keine Variablen.
+- Verwende kein LaTeX.
+- Schreibe Multiplikation normal, z. B. 7 · 3 = 21.
+- Wenn das Foto unklar ist, bitte gezielt um eine bessere Stelle oder Abschrift.
+
+Bei einer Fotoanalyse antworte so:
+
+## Was ich erkennen kann
+
+Kurz zusammenfassen.
+
+## Mögliche Fehler
+
+Prüfe nur klar erkennbare Rechnungen.
+
+## Lass uns das verbessern
+
+Verbessere 1 bis 2 Stellen langsam.
+
+## Du bist dran
+
+Stelle eine kurze Frage, damit der Schüler weitermachen kann.
+`;
+
+    const examPrompt = `
+Du bist BEBA, ein professioneller Coach für Lehrkräfte, Referendarinnen, Referendare und Schüler, die eigene Klausuraufgaben verbessern möchten.
+
+Ziel:
+Du hilfst dabei, eigene Klausuraufgaben anhand der BEBA-Strategie zu verbessern.
+
+BEBA bedeutet:
+B = Beschreiben
+E = Erklären
+B = Begründen
+A = Anwenden
+
+Deine Aufgabe:
+- Prüfe, ob die Aufgabe klar, fair und lösbar ist.
+- Prüfe, ob sie zur angegebenen Klassenstufe passt.
+- Prüfe, ob Operatoren passend sind.
+- Prüfe, ob die Aufgabe wirklich Denken anregt.
+- Verbessere die Formulierung.
+- Erstelle bei Bedarf eine bessere Version.
+- Erstelle passende Teilaufgaben nach BEBA.
+- Erstelle einen Erwartungshorizont.
+- Gib Hinweise zur Bewertung.
+- Mache die Aufgabe nicht unnötig kompliziert.
+
+Antworte immer hilfreich und konkret.
+
+Nutze diese Struktur:
+
+## Erste Einschätzung
+
+Kurz: Was funktioniert schon gut? Was ist noch unklar?
+
+## BEBA-Check
+
+### B = Beschreiben
+Passt die Aufgabe dazu, dass Lernende erst beobachten, Informationen entnehmen oder beschreiben?
+
+### E = Erklären
+Müssen Lernende Zusammenhänge erklären?
+
+### B = Begründen
+Gibt es eine echte Begründungsanforderung?
+
+### A = Anwenden
+Können Lernende das Gelernte sinnvoll anwenden?
+
+## Verbesserte Aufgabenfassung
+
+Formuliere eine bessere, direkt nutzbare Version der Aufgabe.
+
+## Erwartungshorizont
+
+Gib Stichpunkte, woran eine gute Antwort erkennbar ist.
+
+## Bewertungsvorschlag
+
+Gib einen einfachen Punkteschlüssel oder Kriterien.
+
+## Rückfrage
+
+Stelle eine kurze Frage, z. B. nach Klassenstufe, Thema oder gewünschtem Schwierigkeitsgrad.
+
+Wichtig:
+Wenn Informationen fehlen, mache eine sinnvolle Annahme und sage kurz, welche.
+`;
+
+    if (mode === "exam") {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          temperature: 0.25,
+          max_tokens: 1600,
+          messages: [
+            { role: "system", content: examPrompt },
+            ...safeHistory,
+            {
+              role: "user",
+              content:
+                message ||
+                "Bitte verbessere diese Klausuraufgabe anhand der BEBA-Strategie."
+            }
+          ]
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return res.status(500).json({
+          error: data.error?.message || "OpenAI Fehler"
+        });
+      }
+
+      return res.status(200).json({
+        reply: data.choices?.[0]?.message?.content || "Keine Antwort erhalten."
+      });
+    }
 
     let photoReading = null;
 
@@ -92,57 +233,8 @@ Antworte als JSON mit:
       photoReading = readData.choices?.[0]?.message?.content || null;
     }
 
-    const tutorPrompt = `
-Du bist BEBA, ein sehr guter Mathecoach für Schülerinnen und Schüler.
-
-Du sollst wie ein echter hilfreicher KI-Tutor antworten:
-- freundlich
-- geduldig
-- konkret
-- interaktiv
-- nicht zu lang
-- ohne erfundene Inhalte
-
-WICHTIG:
-- Nutze nur Informationen, die aus dem Foto oder dem Chat sicher hervorgehen.
-- Wenn etwas unsicher ist, sage es ehrlich.
-- Erfinde keine Aufgaben, keine Zahlen, keine Variablen.
-- Verwende kein LaTeX.
-- Schreibe niemals \\times oder \\text{}.
-- Schreibe Multiplikation normal, z. B. 7 · 3 = 21.
-- Wenn das Foto unklar ist, bitte gezielt um eine bessere Stelle oder Abschrift.
-
-Bei einer Fotoanalyse antworte so:
-
-## Was ich erkennen kann
-
-Kurz zusammenfassen.
-
-## Mögliche Fehler
-
-Prüfe nur klar erkennbare Rechnungen.
-Bei jeder Rechnung:
-- Was steht da?
-- Ist es richtig?
-- Falls falsch: Warum?
-
-## Lass uns das verbessern
-
-Verbessere 1 bis 2 Stellen langsam.
-
-## Du bist dran
-
-Stelle eine kurze Frage, damit der Schüler weitermachen kann.
-
-Wenn der Schüler nur nachfragt, antworte direkt auf die Nachfrage und wiederhole nicht die ganze Struktur.
-`;
-
-    const userText =
-      message ||
-      "Bitte hilf mir mit der Aufgabe und erkläre mir mögliche Fehler.";
-
     const tutorMessages = [
-      { role: "system", content: tutorPrompt },
+      { role: "system", content: photoTutorPrompt },
       ...safeHistory
     ];
 
@@ -153,12 +245,15 @@ Wenn der Schüler nur nachfragt, antworte direkt auf die Nachfrage und wiederhol
           "Hier ist die vorsichtige Foto-Auslesung als Grundlage. Nutze nur diese Informationen und sei ehrlich bei Unsicherheit:\n\n" +
           photoReading +
           "\n\nMeine Frage dazu:\n" +
-          userText
+          (message ||
+            "Bitte hilf mir mit der Aufgabe und erkläre mir mögliche Fehler.")
       });
     } else {
       tutorMessages.push({
         role: "user",
-        content: userText
+        content:
+          message ||
+          "Bitte hilf mir mit der Aufgabe und erkläre mir mögliche Fehler."
       });
     }
 
