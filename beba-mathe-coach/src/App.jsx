@@ -8,7 +8,7 @@ export default function App() {
       text:
         "# 👋 Willkommen beim BEBA-Mathecoach\n\n" +
         "Fotografiere deine Aufgabe oder deinen Lösungsweg.\n\n" +
-        "Ich lese die Handschrift, suche mögliche Fehler und helfe dir Schritt für Schritt mit BEBA."
+        "Ich analysiere Fehler, erkläre dir das Thema und übe mit dir Schritt für Schritt."
     }
   ]);
 
@@ -18,120 +18,33 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [processingImage, setProcessingImage] = useState(false);
 
-  function getExifOrientation(arrayBuffer) {
-    const view = new DataView(arrayBuffer);
-
-    if (view.getUint16(0, false) !== 0xffd8) return 1;
-
-    let offset = 2;
-
-    while (offset < view.byteLength) {
-      const marker = view.getUint16(offset, false);
-      offset += 2;
-
-      if (marker === 0xffe1) {
-        offset += 2;
-
-        if (view.getUint32(offset, false) !== 0x45786966) return 1;
-
-        offset += 6;
-
-        const little = view.getUint16(offset, false) === 0x4949;
-        offset += view.getUint32(offset + 4, little);
-
-        const tags = view.getUint16(offset, little);
-        offset += 2;
-
-        for (let i = 0; i < tags; i++) {
-          const tagOffset = offset + i * 12;
-
-          if (view.getUint16(tagOffset, little) === 0x0112) {
-            return view.getUint16(tagOffset + 8, little);
-          }
-        }
-      } else {
-        offset += view.getUint16(offset, false);
-      }
-    }
-
-    return 1;
-  }
-
-  function loadImage(src) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-
-      img.onload = () => resolve(img);
-      img.onerror = reject;
-      img.src = src;
-    });
-  }
-
-  async function compressAndRotateImage(file) {
-    const arrayBuffer = await file.arrayBuffer();
-    const orientation = getExifOrientation(arrayBuffer);
-
-    const reader = new FileReader();
+  async function compressImage(file) {
+    const img = new Image();
 
     const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
 
-    const img = await loadImage(dataUrl);
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
 
-    const maxSize = 900;
+    const maxSize = 850;
     const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
 
-    let width = Math.round(img.width * scale);
-    let height = Math.round(img.height * scale);
+    const width = Math.round(img.width * scale);
+    const height = Math.round(img.height * scale);
 
     const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
     const ctx = canvas.getContext("2d");
-
-    if ([5, 6, 7, 8].includes(orientation)) {
-      canvas.width = height;
-      canvas.height = width;
-    } else {
-      canvas.width = width;
-      canvas.height = height;
-    }
-
-    switch (orientation) {
-      case 2:
-        ctx.translate(width, 0);
-        ctx.scale(-1, 1);
-        break;
-      case 3:
-        ctx.translate(width, height);
-        ctx.rotate(Math.PI);
-        break;
-      case 4:
-        ctx.translate(0, height);
-        ctx.scale(1, -1);
-        break;
-      case 5:
-        ctx.rotate(0.5 * Math.PI);
-        ctx.scale(1, -1);
-        break;
-      case 6:
-        ctx.rotate(0.5 * Math.PI);
-        ctx.translate(0, -height);
-        break;
-      case 7:
-        ctx.rotate(0.5 * Math.PI);
-        ctx.translate(width, -height);
-        ctx.scale(-1, 1);
-        break;
-      case 8:
-        ctx.rotate(-0.5 * Math.PI);
-        ctx.translate(-width, 0);
-        break;
-      default:
-        break;
-    }
-
     ctx.drawImage(img, 0, 0, width, height);
 
     return canvas.toDataURL("image/jpeg", 0.55);
@@ -143,13 +56,11 @@ export default function App() {
 
     try {
       setProcessingImage(true);
-
-      const compressed = await compressAndRotateImage(file);
-
+      const compressed = await compressImage(file);
       setImageBase64(compressed);
       setImagePreview(compressed);
-    } catch (error) {
-      alert("Das Foto konnte nicht verarbeitet werden. Bitte versuche es nochmal.");
+    } catch {
+      alert("Das Foto konnte nicht verarbeitet werden. Bitte versuche es erneut.");
     } finally {
       setProcessingImage(false);
       e.target.value = "";
@@ -161,39 +72,38 @@ export default function App() {
 
     const userText =
       input.trim() ||
-      "Bitte analysiere das Foto und finde mögliche Fehler.";
+      "Bitte analysiere das Foto gründlich. Finde Fehler, erkläre sie und hilf mir, das Thema zu verstehen.";
 
-    const currentImage = imagePreview;
+    const newUserMessage = {
+      role: "user",
+      text: userText,
+      image: imagePreview
+    };
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "user",
-        text: userText,
-        image: currentImage
-      }
-    ]);
+    const updatedMessages = [...messages, newUserMessage];
 
+    setMessages(updatedMessages);
     setInput("");
     setLoading(true);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000);
 
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
-        signal: controller.signal,
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
           message: userText,
-          imageBase64
+          imageBase64,
+          history: updatedMessages
+            .filter((m) => !m.image)
+            .slice(-10)
+            .map((m) => ({
+              role: m.role,
+              content: m.text
+            }))
         })
       });
-
-      clearTimeout(timeoutId);
 
       const data = await response.json();
 
@@ -201,10 +111,7 @@ export default function App() {
         ...prev,
         {
           role: "assistant",
-          text:
-            data.reply ||
-            data.error ||
-            "Keine Antwort erhalten."
+          text: data.reply || data.error || "Keine Antwort erhalten."
         }
       ]);
 
@@ -217,12 +124,10 @@ export default function App() {
           role: "assistant",
           text:
             "# Fehler\n\n" +
-            "Die Analyse hat zu lange gedauert oder die Verbindung wurde unterbrochen.\n\n" +
-            "Bitte versuche es nochmal mit einem schärferen Foto und möglichst wenig Hintergrund."
+            "Die Verbindung wurde unterbrochen. Bitte versuche es nochmal."
         }
       ]);
     } finally {
-      clearTimeout(timeoutId);
       setLoading(false);
     }
   }
@@ -233,7 +138,7 @@ export default function App() {
         role: "assistant",
         text:
           "# Neue Aufgabe ✅\n\n" +
-          "Fotografiere jetzt deine nächste Matheaufgabe."
+          "Fotografiere eine Aufgabe oder stelle direkt eine Frage."
       }
     ]);
 
@@ -253,9 +158,7 @@ export default function App() {
       }}
     >
       <div style={{ maxWidth: "900px", margin: "0 auto" }}>
-        <h1 style={{ textAlign: "center", marginBottom: "20px" }}>
-          📘 BEBA-Mathecoach
-        </h1>
+        <h1 style={{ textAlign: "center" }}>📘 BEBA-Mathecoach</h1>
 
         <div
           style={{
@@ -320,7 +223,7 @@ export default function App() {
             >
               {processingImage
                 ? "📷 Ich bereite das Foto vor..."
-                : "📖 Ich lese die Handschrift und analysiere die Aufgabe..."}
+                : "🧠 Ich analysiere und denke mit dir Schritt für Schritt..."}
             </div>
           )}
         </div>
@@ -377,7 +280,7 @@ export default function App() {
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Was verstehst du nicht?"
+            placeholder="Frag nach: Was ist falsch? Warum? Wie rechne ich weiter?"
             rows={3}
             style={{
               width: "100%",
@@ -430,7 +333,7 @@ export default function App() {
                 fontWeight: "bold"
               }}
             >
-              {loading ? "Analysiere..." : "Senden"}
+              {loading ? "Denke..." : "Senden"}
             </button>
 
             <button
