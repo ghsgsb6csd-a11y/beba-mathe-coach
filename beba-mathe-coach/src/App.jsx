@@ -2,13 +2,16 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 
 export default function App() {
+  const [mode, setMode] = useState("photo");
+
   const [messages, setMessages] = useState([
     {
       role: "assistant",
       text:
         "# 👋 Willkommen beim BEBA-Mathecoach\n\n" +
-        "Fotografiere deine Aufgabe oder deinen Lösungsweg.\n\n" +
-        "Ich lese zuerst das Foto, prüfe dann mögliche Fehler und lerne mit dir Schritt für Schritt."
+        "Wähle oben einen Modus:\n\n" +
+        "- 📷 **Aufgabe prüfen**: Foto hochladen und Fehler analysieren\n" +
+        "- ✍️ **Klausuraufgabe verbessern**: eigene Aufgaben mit BEBA überarbeiten"
     }
   ]);
 
@@ -66,6 +69,23 @@ export default function App() {
     }
   }
 
+  function changeMode(newMode) {
+    setMode(newMode);
+    setInput("");
+    setImageBase64("");
+    setImagePreview("");
+
+    setMessages([
+      {
+        role: "assistant",
+        text:
+          newMode === "photo"
+            ? "# 📷 Aufgabe prüfen\n\nFotografiere eine Aufgabe oder deinen Lösungsweg. Ich lese zuerst das Foto und prüfe dann mögliche Fehler."
+            : "# ✍️ Klausuraufgabe verbessern\n\nSchreibe deine Klausuraufgabe hier hinein. Ich helfe dir, sie mit der BEBA-Strategie klarer, fairer und lernwirksamer zu machen."
+      }
+    ]);
+  }
+
   async function sendMessage() {
     if (!input.trim() && !imageBase64) return;
 
@@ -92,6 +112,7 @@ export default function App() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
+          mode,
           message: userText,
           imageBase64,
           history: updatedMessages
@@ -123,7 +144,7 @@ export default function App() {
           role: "assistant",
           text:
             "## Verbindung unterbrochen\n\n" +
-            "Die Anfrage hat nicht geklappt. Bitte versuche es nochmal mit einem kleineren oder schärferen Foto."
+            "Die Anfrage hat nicht geklappt. Bitte versuche es nochmal."
         }
       ]);
     } finally {
@@ -132,18 +153,7 @@ export default function App() {
   }
 
   function resetChat() {
-    setMessages([
-      {
-        role: "assistant",
-        text:
-          "# Neue Aufgabe ✅\n\n" +
-          "Fotografiere eine Aufgabe oder stelle direkt eine Frage."
-      }
-    ]);
-
-    setInput("");
-    setImageBase64("");
-    setImagePreview("");
+    changeMode(mode);
   }
 
   return (
@@ -157,7 +167,47 @@ export default function App() {
       }}
     >
       <div style={{ maxWidth: "900px", margin: "0 auto" }}>
-        <h1 style={{ textAlign: "center" }}>📘 BEBA-Mathecoach</h1>
+        <h1 style={{ textAlign: "center" }}>📘 BEBA-Coach</h1>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            marginBottom: "16px",
+            flexWrap: "wrap",
+            justifyContent: "center"
+          }}
+        >
+          <button
+            onClick={() => changeMode("photo")}
+            style={{
+              border: "none",
+              background: mode === "photo" ? "#2563eb" : "#e5e7eb",
+              color: mode === "photo" ? "white" : "#111827",
+              borderRadius: "14px",
+              padding: "12px 16px",
+              cursor: "pointer",
+              fontWeight: "bold"
+            }}
+          >
+            📷 Aufgabe prüfen
+          </button>
+
+          <button
+            onClick={() => changeMode("exam")}
+            style={{
+              border: "none",
+              background: mode === "exam" ? "#2563eb" : "#e5e7eb",
+              color: mode === "exam" ? "white" : "#111827",
+              borderRadius: "14px",
+              padding: "12px 16px",
+              cursor: "pointer",
+              fontWeight: "bold"
+            }}
+          >
+            ✍️ Klausuraufgabe verbessern
+          </button>
+        </div>
 
         <div
           style={{
@@ -222,6 +272,8 @@ export default function App() {
             >
               {processingImage
                 ? "📷 Ich bereite das Foto vor..."
+                : mode === "exam"
+                ? "✍️ Ich prüfe deine Klausuraufgabe..."
                 : "🧠 Ich lese zuerst das Foto und prüfe dann die Aufgabe..."}
             </div>
           )}
@@ -279,8 +331,12 @@ export default function App() {
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Frag nach: Was ist falsch? Warum? Wie rechne ich weiter?"
-            rows={3}
+            placeholder={
+              mode === "exam"
+                ? "Füge hier deine Klausuraufgabe ein. Zum Beispiel: Thema, Klassenstufe, Aufgabe, erwartete Lösung..."
+                : "Frag nach: Was ist falsch? Warum? Wie rechne ich weiter?"
+            }
+            rows={4}
             style={{
               width: "100%",
               border: "1px solid #ddd",
@@ -300,24 +356,26 @@ export default function App() {
               flexWrap: "wrap"
             }}
           >
-            <label
-              style={{
-                background: "#2563eb",
-                color: "white",
-                borderRadius: "12px",
-                padding: "12px 16px",
-                cursor: "pointer",
-                fontSize: "16px"
-              }}
-            >
-              📷 Foto aufnehmen
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                style={{ display: "none" }}
-              />
-            </label>
+            {mode === "photo" && (
+              <label
+                style={{
+                  background: "#2563eb",
+                  color: "white",
+                  borderRadius: "12px",
+                  padding: "12px 16px",
+                  cursor: "pointer",
+                  fontSize: "16px"
+                }}
+              >
+                📷 Foto aufnehmen
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  style={{ display: "none" }}
+                />
+              </label>
+            )}
 
             <button
               onClick={sendMessage}
@@ -332,7 +390,7 @@ export default function App() {
                 fontWeight: "bold"
               }}
             >
-              {loading ? "Denke..." : "Senden"}
+              {loading ? "Denke..." : mode === "exam" ? "Verbessern" : "Senden"}
             </button>
 
             <button
