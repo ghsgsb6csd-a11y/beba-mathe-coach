@@ -6,7 +6,7 @@ export default function App() {
     {
       role: "assistant",
       text:
-        "Hallo 👋\n\nLade zuerst ein Foto von der Aufgabe hoch, die du verbessern möchtest.\n\nDanach begleite ich dich Schritt für Schritt mit der BEBA-Strategie."
+        "Hallo 👋\n\nTippe auf **Foto aufnehmen** und fotografiere die Aufgabe oder deinen Lösungsweg.\n\nIch erkenne die Aufgabe, suche typische Fehler und helfe dir mit der BEBA-Strategie."
     }
   ]);
 
@@ -21,6 +21,15 @@ export default function App() {
 
     setImage(file);
     setImagePreview(URL.createObjectURL(file));
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        text:
+          "Foto erhalten ✅\n\nKlicke jetzt auf **Aufgabe analysieren**. Du kannst vorher noch kurz dazuschreiben, was du nicht verstanden hast."
+      }
+    ]);
   }
 
   function fileToBase64(file) {
@@ -37,7 +46,7 @@ export default function App() {
       {
         role: "assistant",
         text:
-          "Neue Aufgabe gestartet ✅\n\nLade bitte wieder ein Foto der Aufgabe hoch."
+          "Neue Aufgabe gestartet ✅\n\nTippe auf **Foto aufnehmen** und fotografiere die nächste Aufgabe."
       }
     ]);
     setInput("");
@@ -50,13 +59,15 @@ export default function App() {
 
     const currentInput =
       input.trim() ||
-      "Bitte hilf mir, diese Aufgabe mit der BEBA-Strategie zu verstehen.";
-    const currentImage = image;
+      "Bitte analysiere das Foto. Lies die Handschrift, finde mögliche Fehler und hilf mir mit der BEBA-Strategie.";
 
     setMessages((prev) => [
       ...prev,
       { role: "user", text: currentInput },
-      { role: "assistant", text: "Ich schaue mir die Aufgabe genau an..." }
+      {
+        role: "assistant",
+        text: "Ich lese die Aufgabe und prüfe den Lösungsweg..."
+      }
     ]);
 
     setInput("");
@@ -65,8 +76,8 @@ export default function App() {
     try {
       let imageBase64 = null;
 
-      if (currentImage) {
-        imageBase64 = await fileToBase64(currentImage);
+      if (image) {
+        imageBase64 = await fileToBase64(image);
       }
 
       const response = await fetch("/api/chat", {
@@ -115,38 +126,54 @@ export default function App() {
       <h1>📘 BEBA-Mathecoach</h1>
 
       <p>
-        Lade ein Foto deiner Aufgabe hoch. Der Coach konzentriert sich nur auf
-        diese Aufgabe und führt dich durch Beschreiben, Erklären, Begründen und
-        Anwenden.
+        Fotografiere deine Aufgabe oder deinen Lösungsweg. Der Coach liest das
+        Bild, beschreibt mögliche Fehlerstellen und führt dich Schritt für
+        Schritt durch BEBA.
       </p>
 
       <div
         style={{
-          padding: "18px",
+          padding: "20px",
           border: "1px solid #ddd",
-          borderRadius: "12px",
+          borderRadius: "14px",
           marginBottom: "20px",
           background: "#fafafa"
         }}
       >
-        <h2>1. Aufgabe hochladen</h2>
+        <h2>1. Foto aufnehmen</h2>
 
-       <input
-  type="file"
-  accept="image/*"
-  capture="environment"
-  onChange={handleImageUpload}
-/>
+        <label
+          style={{
+            display: "inline-block",
+            padding: "14px 22px",
+            background: "#2563eb",
+            color: "white",
+            borderRadius: "12px",
+            fontSize: "18px",
+            cursor: "pointer",
+            marginTop: "10px"
+          }}
+        >
+          📸 Foto aufnehmen
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleImageUpload}
+            style={{ display: "none" }}
+          />
+        </label>
 
         {imagePreview && (
-          <div style={{ marginTop: "16px" }}>
+          <div style={{ marginTop: "18px" }}>
+            <h3>Dein Foto</h3>
             <img
               src={imagePreview}
               alt="Hochgeladene Aufgabe"
               style={{
                 maxWidth: "100%",
-                borderRadius: "10px",
-                border: "1px solid #ccc"
+                borderRadius: "12px",
+                border: "2px solid #ddd"
               }}
             />
           </div>
@@ -190,7 +217,7 @@ export default function App() {
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        placeholder="Optional: Was war schwierig? Zum Beispiel: Ich verstehe den Ansatz nicht."
+        placeholder="Optional: Was war schwierig? Zum Beispiel: Ich weiß nicht, wo mein Fehler ist."
         rows={4}
         style={{
           width: "100%",
@@ -212,7 +239,7 @@ export default function App() {
             cursor: loading ? "not-allowed" : "pointer"
           }}
         >
-          {loading ? "Analysiere..." : "Aufgabe verbessern"}
+          {loading ? "Analysiere..." : "Aufgabe analysieren"}
         </button>
 
         <button
