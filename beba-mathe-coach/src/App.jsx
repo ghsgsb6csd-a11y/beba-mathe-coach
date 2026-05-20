@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
 export default function App() {
+  const fileInputRef = useRef(null);
+
   const [messages, setMessages] = useState([
     {
       role: "assistant",
       text:
-        "Hallo 👋\n\nTippe auf **Foto aufnehmen** und fotografiere die Aufgabe oder deinen Lösungsweg.\n\nIch erkenne die Aufgabe, suche typische Fehler und helfe dir mit der BEBA-Strategie."
+        "# 👋 Willkommen beim BEBA-Mathecoach\n\n" +
+        "Fotografiere deine Aufgabe oder deinen Lösungsweg.\n\n" +
+        "Ich erkenne Handschrift, analysiere Fehler und helfe dir Schritt für Schritt."
     }
   ]);
 
@@ -15,58 +19,44 @@ export default function App() {
   const [imagePreview, setImagePreview] = useState("");
   const [loading, setLoading] = useState(false);
 
+  function openCamera() {
+    fileInputRef.current?.click();
+  }
+
   function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
 
     setImage(file);
     setImagePreview(URL.createObjectURL(file));
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "assistant",
-        text:
-          "Foto erhalten ✅\n\nKlicke jetzt auf **Aufgabe analysieren**. Du kannst vorher noch kurz dazuschreiben, was du nicht verstanden hast."
-      }
-    ]);
   }
 
   function fileToBase64(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
+
       reader.onload = () => resolve(reader.result);
       reader.onerror = reject;
+
       reader.readAsDataURL(file);
     });
   }
 
-  function resetTask() {
-    setMessages([
-      {
-        role: "assistant",
-        text:
-          "Neue Aufgabe gestartet ✅\n\nTippe auf **Foto aufnehmen** und fotografiere die nächste Aufgabe."
-      }
-    ]);
-    setInput("");
-    setImage(null);
-    setImagePreview("");
-  }
-
   async function sendMessage() {
-    if (!image && !input.trim()) return;
+    if (!input.trim() && !image) return;
 
-    const currentInput =
+    const userText =
       input.trim() ||
-      "Bitte analysiere das Foto. Lies die Handschrift, finde mögliche Fehler und hilf mir mit der BEBA-Strategie.";
+      "Bitte analysiere das Foto und finde mögliche Fehler.";
+
+    const preview = imagePreview;
 
     setMessages((prev) => [
       ...prev,
-      { role: "user", text: currentInput },
       {
-        role: "assistant",
-        text: "Ich lese die Aufgabe und prüfe den Lösungsweg..."
+        role: "user",
+        text: userText,
+        image: preview
       }
     ]);
 
@@ -86,7 +76,7 @@ export default function App() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          message: currentInput,
+          message: userText,
           imageBase64
         })
       });
@@ -94,18 +84,21 @@ export default function App() {
       const data = await response.json();
 
       setMessages((prev) => [
-        ...prev.slice(0, -1),
+        ...prev,
         {
           role: "assistant",
-          text: data.reply || data.error || "Keine Antwort erhalten."
+          text: data.reply || "Keine Antwort erhalten."
         }
       ]);
+
+      setImage(null);
+      setImagePreview("");
     } catch (error) {
       setMessages((prev) => [
-        ...prev.slice(0, -1),
+        ...prev,
         {
           role: "assistant",
-          text: "Fehler: " + error.message
+          text: `# Fehler\n\n${error.message}`
         }
       ]);
     }
@@ -113,145 +106,219 @@ export default function App() {
     setLoading(false);
   }
 
+  function resetChat() {
+    setMessages([
+      {
+        role: "assistant",
+        text:
+          "# Neue Aufgabe ✅\n\n" +
+          "Fotografiere jetzt die nächste Matheaufgabe."
+      }
+    ]);
+
+    setInput("");
+    setImage(null);
+    setImagePreview("");
+  }
+
   return (
     <div
       style={{
-        fontFamily: "Arial, sans-serif",
-        maxWidth: "900px",
-        margin: "0 auto",
-        padding: "24px",
-        lineHeight: "1.5"
+        background: "#f5f7fb",
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        padding: "20px"
       }}
     >
-      <h1>📘 BEBA-Mathecoach</h1>
-
-      <p>
-        Fotografiere deine Aufgabe oder deinen Lösungsweg. Der Coach liest das
-        Bild, beschreibt mögliche Fehlerstellen und führt dich Schritt für
-        Schritt durch BEBA.
-      </p>
-
       <div
         style={{
-          padding: "20px",
-          border: "1px solid #ddd",
-          borderRadius: "14px",
-          marginBottom: "20px",
-          background: "#fafafa"
+          width: "100%",
+          maxWidth: "900px",
+          display: "flex",
+          flexDirection: "column"
         }}
       >
-        <h2>1. Foto aufnehmen</h2>
-
-        <label
+        <h1
           style={{
-            display: "inline-block",
-            padding: "14px 22px",
-            background: "#2563eb",
-            color: "white",
-            borderRadius: "12px",
-            fontSize: "18px",
-            cursor: "pointer",
-            marginTop: "10px"
+            textAlign: "center",
+            marginBottom: "20px"
           }}
         >
-          📸 Foto aufnehmen
+          📘 BEBA-Mathecoach
+        </h1>
+
+        <div
+          style={{
+            flex: 1,
+            background: "white",
+            borderRadius: "20px",
+            padding: "20px",
+            overflowY: "auto",
+            minHeight: "70vh",
+            boxShadow: "0 4px 18px rgba(0,0,0,0.08)"
+          }}
+        >
+          {messages.map((msg, index) => (
+            <div
+              key={index}
+              style={{
+                display: "flex",
+                justifyContent:
+                  msg.role === "user" ? "flex-end" : "flex-start",
+                marginBottom: "18px"
+              }}
+            >
+              <div
+                style={{
+                  background:
+                    msg.role === "user" ? "#2563eb" : "#f1f5f9",
+                  color: msg.role === "user" ? "white" : "#111",
+                  padding: "16px",
+                  borderRadius: "18px",
+                  maxWidth: "85%",
+                  lineHeight: "1.6",
+                  fontSize: "16px"
+                }}
+              >
+                {msg.image && (
+                  <img
+                    src={msg.image}
+                    alt="Aufgabe"
+                    style={{
+                      width: "100%",
+                      borderRadius: "12px",
+                      marginBottom: "12px"
+                    }}
+                  />
+                )}
+
+                <ReactMarkdown>{msg.text}</ReactMarkdown>
+              </div>
+            </div>
+          ))}
+
+          {loading && (
+            <div
+              style={{
+                background: "#f1f5f9",
+                padding: "16px",
+                borderRadius: "16px",
+                display: "inline-block"
+              }}
+            >
+              📖 Ich lese die Handschrift und analysiere die Aufgabe...
+            </div>
+          )}
+        </div>
+
+        {imagePreview && (
+          <div
+            style={{
+              marginTop: "14px",
+              background: "white",
+              padding: "12px",
+              borderRadius: "14px"
+            }}
+          >
+            <img
+              src={imagePreview}
+              alt="Vorschau"
+              style={{
+                width: "140px",
+                borderRadius: "12px"
+              }}
+            />
+          </div>
+        )}
+
+        <div
+          style={{
+            marginTop: "16px",
+            background: "white",
+            borderRadius: "18px",
+            padding: "14px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.08)"
+          }}
+        >
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Was verstehst du nicht?"
+            rows={3}
+            style={{
+              width: "100%",
+              border: "none",
+              resize: "none",
+              outline: "none",
+              fontSize: "16px"
+            }}
+          />
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginTop: "12px",
+              gap: "10px"
+            }}
+          >
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={openCamera}
+                style={{
+                  border: "none",
+                  background: "#2563eb",
+                  color: "white",
+                  borderRadius: "12px",
+                  padding: "12px 16px",
+                  cursor: "pointer",
+                  fontSize: "18px"
+                }}
+              >
+                📷
+              </button>
+
+              <button
+                onClick={resetChat}
+                style={{
+                  border: "none",
+                  background: "#e5e7eb",
+                  borderRadius: "12px",
+                  padding: "12px 16px",
+                  cursor: "pointer"
+                }}
+              >
+                Neu
+              </button>
+            </div>
+
+            <button
+              onClick={sendMessage}
+              disabled={loading}
+              style={{
+                border: "none",
+                background: "#16a34a",
+                color: "white",
+                borderRadius: "12px",
+                padding: "12px 20px",
+                cursor: "pointer",
+                fontWeight: "bold"
+              }}
+            >
+              Senden
+            </button>
+          </div>
+
           <input
+            ref={fileInputRef}
             type="file"
             accept="image/*"
             capture="environment"
             onChange={handleImageUpload}
             style={{ display: "none" }}
           />
-        </label>
-
-        {imagePreview && (
-          <div style={{ marginTop: "18px" }}>
-            <h3>Dein Foto</h3>
-            <img
-              src={imagePreview}
-              alt="Hochgeladene Aufgabe"
-              style={{
-                maxWidth: "100%",
-                borderRadius: "12px",
-                border: "2px solid #ddd"
-              }}
-            />
-          </div>
-        )}
-      </div>
-
-      <div
-        style={{
-          border: "1px solid #ccc",
-          borderRadius: "12px",
-          padding: "20px",
-          minHeight: "420px",
-          marginBottom: "20px",
-          background: "white"
-        }}
-      >
-        {messages.map((msg, index) => (
-          <div
-            key={index}
-            style={{
-              marginBottom: "18px",
-              textAlign: msg.role === "user" ? "right" : "left"
-            }}
-          >
-            <div
-              style={{
-                display: "inline-block",
-                textAlign: "left",
-                padding: "14px 16px",
-                borderRadius: "12px",
-                background: msg.role === "user" ? "#dbeafe" : "#f3f4f6",
-                maxWidth: "92%"
-              }}
-            >
-              <ReactMarkdown>{msg.text}</ReactMarkdown>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <textarea
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="Optional: Was war schwierig? Zum Beispiel: Ich weiß nicht, wo mein Fehler ist."
-        rows={4}
-        style={{
-          width: "100%",
-          padding: "12px",
-          marginBottom: "12px",
-          borderRadius: "10px",
-          border: "1px solid #ccc",
-          fontSize: "16px"
-        }}
-      />
-
-      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-        <button
-          onClick={sendMessage}
-          disabled={loading}
-          style={{
-            padding: "12px 22px",
-            fontSize: "16px",
-            cursor: loading ? "not-allowed" : "pointer"
-          }}
-        >
-          {loading ? "Analysiere..." : "Aufgabe analysieren"}
-        </button>
-
-        <button
-          onClick={resetTask}
-          style={{
-            padding: "12px 22px",
-            fontSize: "16px",
-            cursor: "pointer"
-          }}
-        >
-          Neue Aufgabe starten
-        </button>
+        </div>
       </div>
     </div>
   );
