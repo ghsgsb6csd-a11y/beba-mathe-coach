@@ -44,10 +44,12 @@ Analysiere Fotos von Matheaufgaben und Lösungswegen.
 Wichtig:
 - Lies möglichst auch Handschrift.
 - Erkenne mögliche Fehler.
+- Wenn das Bild gedreht wirkt, interpretiere es trotzdem korrekt.
 - Erkläre langsam und verständlich.
 - Nutze Überschriften und Absätze.
 - Schreibe übersichtlich in Markdown.
 - Hilf Schritt für Schritt mit der BEBA-Strategie.
+- Gib nicht sofort eine vollständige Musterlösung.
 
 Antwortstruktur:
 
@@ -66,18 +68,22 @@ Antwortstruktur:
 ## Merksatz
 `;
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 40000);
+
     const response = await fetch(
       "https://api.openai.com/v1/chat/completions",
       {
         method: "POST",
+        signal: controller.signal,
         headers: {
-          "Content-Type":
-            "application/json",
+          "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: "gpt-4o",
-          temperature: 0.4,
+          model: "gpt-4o-mini",
+          temperature: 0.3,
+          max_tokens: 900,
           messages: [
             {
               role: "system",
@@ -92,6 +98,8 @@ Antwortstruktur:
       }
     );
 
+    clearTimeout(timeoutId);
+
     const data = await response.json();
 
     if (!response.ok) {
@@ -104,13 +112,15 @@ Antwortstruktur:
 
     return res.status(200).json({
       reply:
-        data.choices?.[0]?.message
-          ?.content ||
+        data.choices?.[0]?.message?.content ||
         "Keine Antwort erhalten."
     });
   } catch (error) {
     return res.status(500).json({
-      error: error.message
+      error:
+        error.name === "AbortError"
+          ? "Die Anfrage hat zu lange gedauert. Bitte versuche es erneut."
+          : error.message
     });
   }
 }
